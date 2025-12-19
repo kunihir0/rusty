@@ -1,4 +1,37 @@
 {
-  "serverList": {},
-  "serverListLite": {}
+  "serverList": {
+    "195.60.166.86-28093": {
+      "title": "Survivors.gg #Medium [ 2x Vanilla ] FULLWIPED 18.12",
+      "serverIp": "195.60.166.86",
+      "appPort": "28093",
+      "steamId": "76561198365871171",
+      "playerToken": "-1558562031",
+      "description": "\n - Welcome to Survivors.gg \n -- Rust gaming community since 2014 \n --- Join Us: www.discord.survivors.gg \n\n - Fullwipes every Thursday at 16:00 CET \n - All VIP commands are free for all \n - Max Team: No Limit \n - Write /help for all commands \n - Electric BP's are unlocked \n - 2x Gather Rates. \n - Half smelt and crafting speeds \n - Faster nights \n - Fishing Village and Large Barn with Recycler \n - no Kits, no TP and no P2W! \n\n Admins do not play or interfere with gameplay. \n Visit www.Survi",
+      "img": "https://www.survivors.gg/temp/server2.png",
+      "url": "https://shop.survivors.gg/products?tag=vip-packages",
+      "notes": {},
+      "switches": {},
+      "alarms": {},
+      "storageMonitors": {},
+      "markers": {},
+      "switchGroups": {},
+      "battlemetricsId": "13065465",
+      "connect": "connect 195.60.166.86:28024",
+      "cargoShipEgressTimeMs": 3000000,
+      "oilRigLockedCrateUnlockTimeMs": 900000,
+      "timeTillDay": null,
+      "timeTillNight": null,
+      "discordThreadId": "1451453992738754794"
+    }
+  },
+  "serverListLite": {
+    "195.60.166.86-28093": {
+      "76561198365871171": {
+        "serverIp": "195.60.166.86",
+        "appPort": "28093",
+        "steamId": "76561198365871171",
+        "playerToken": "-1558562031"
+      }
+    }
+  }
 }
