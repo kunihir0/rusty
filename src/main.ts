@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { dirname, importx } from "@discordx/importer";
 
 import { bot } from "./bot.js";

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { dirname, resolve } from "@discordx/importer";
 import chokidar from "chokidar";
 import { DIService, MetadataStorage } from "discordx";
