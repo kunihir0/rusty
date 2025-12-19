@@ -112,6 +112,7 @@ bot.once("ready", async () => {
             const row = new ActionRowBuilder<ButtonBuilder>()
               .addComponents(
                 new ButtonBuilder().setCustomId(`pair-${data.serverId}`).setLabel("Pair").setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`remove-${data.serverId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setURL(data.data.url).setLabel("Website").setStyle(ButtonStyle.Link),
                 new ButtonBuilder().setURL(`https://www.battlemetrics.com/servers/rust/${data.data.battlemetricsId}`).setLabel("BattleMetrics").setStyle(ButtonStyle.Link)
               );
@@ -133,7 +134,7 @@ bot.on("interactionCreate", async (interaction: Interaction) => {
     console.log('FCM Handler State on button click:', appState.fcmHandler?.state);
     const customId = interaction.customId;
 
-    if (customId.startsWith("pair-") || customId.startsWith("disconnect-")) {
+    if (customId.startsWith("pair-") || customId.startsWith("disconnect-") || customId.startsWith("remove-")) {
       const serverId = customId.substring(customId.indexOf('-') + 1);
       
       if (!appState.fcmHandler || !appState.fcmHandler.state.serverList[serverId]) {
@@ -141,10 +142,10 @@ bot.on("interactionCreate", async (interaction: Interaction) => {
         return;
       }
 
-      await interaction.deferUpdate();
       const server = appState.fcmHandler.state.serverList[serverId];
 
       if (customId.startsWith("pair-")) {
+        await interaction.deferUpdate();
         try {
           if (appState.rustPlus) {
             appState.rustPlus.disconnect();
@@ -158,6 +159,7 @@ bot.on("interactionCreate", async (interaction: Interaction) => {
             const row = new ActionRowBuilder<ButtonBuilder>()
               .addComponents(
                 new ButtonBuilder().setCustomId(`disconnect-${serverId}`).setLabel("Disconnect").setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`remove-${serverId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setURL(server.url).setLabel("Website").setStyle(ButtonStyle.Link),
                 new ButtonBuilder().setURL(`https://www.battlemetrics.com/servers/rust/${server.battlemetricsId}`).setLabel("BattleMetrics").setStyle(ButtonStyle.Link)
               );
@@ -166,15 +168,16 @@ bot.on("interactionCreate", async (interaction: Interaction) => {
 
           newRustPlus.on('error', async (e) => {
             console.error(`Failed to pair with ${server.title}:`, e);
-            await interaction.followUp({ content: `Failed to connect: ${e.message}`, ephemeral: true });
+            await interaction.followUp({ content: `Failed to connect: ${e.message}`, flags: [64] });
           });
 
           newRustPlus.connect();
         } catch (e: any) {
           console.error("Pairing failed:", e);
-          await interaction.followUp({ content: `An error occurred during pairing: ${e.message}`, ephemeral: true });
+          await interaction.followUp({ content: `An error occurred during pairing: ${e.message}`, flags: [64] });
         }
-      } else { // disconnect-
+      } else if (customId.startsWith("disconnect-")) {
+        await interaction.deferUpdate();
         if (appState.rustPlus) {
           appState.rustPlus.disconnect();
           appState.rustPlus = undefined;
@@ -184,10 +187,44 @@ bot.on("interactionCreate", async (interaction: Interaction) => {
         const row = new ActionRowBuilder<ButtonBuilder>()
           .addComponents(
             new ButtonBuilder().setCustomId(`pair-${serverId}`).setLabel("Pair").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`remove-${serverId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setURL(server.url).setLabel("Website").setStyle(ButtonStyle.Link),
             new ButtonBuilder().setURL(`https://www.battlemetrics.com/servers/rust/${server.battlemetricsId}`).setLabel("BattleMetrics").setStyle(ButtonStyle.Link)
           );
         await interaction.editReply({ components: [row] });
+
+      } else { // remove-
+        await interaction.deferReply({ ephemeral: true });
+        try {
+            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+            const persistence = new JsonPersistenceManager(fcmStatePath);
+            const state = persistence.loadState();
+
+            if (state.serverList && state.serverList[serverId]) {
+                if (appState.rustPlus && appState.rustPlus.server === serverId.split('-')[0] && appState.rustPlus.port.toString() === serverId.split('-')[1]) {
+                    appState.rustPlus.disconnect();
+                    appState.rustPlus = undefined;
+                }
+
+                delete state.serverList[serverId];
+                if (state.serverListLite && state.serverListLite[serverId]) {
+                    delete state.serverListLite[serverId];
+                }
+                persistence.saveState(state);
+
+                // Delete the original message
+                if (interaction.message) {
+                    await interaction.message.delete();
+                }
+
+                await interaction.editReply(`Server ${serverId} has been removed.`);
+            } else {
+                await interaction.editReply(`Server ${serverId} not found in state file.`);
+            }
+        } catch (e: any) {
+            console.error("Error removing server:", e);
+            await interaction.editReply(`An error occurred while removing the server: ${e.message}`);
+        }
       }
       return; // Stop further processing
     }

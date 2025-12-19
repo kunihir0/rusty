@@ -1,36 +1,4 @@
 {
-  "serverList": {
-    "94.231.215.7-28082": {
-      "title": "[NA] Winterust - 2x Monthly",
-      "serverIp": "94.231.215.7",
-      "appPort": "28082",
-      "steamId": "76561198365871171",
-      "playerToken": "-423603828",
-      "description": "The Official Home Of Ser Winter!\n Map Wipes: On Force Wipe\n BPs Wipe: NEVER\n\n PLAYER REPORTS\n \t• Got clips? Submit a ticket in our Discord!\n \t• No clips? Press F7 to submit a report in-game!\n\n \t``STORE: store.Winterust.net \t|\tSUPPORT: discord.gg/Winterust \n\nWinterust Features \n\tActive Staff\t\t | \tBase Pop: 300+\t\t| \tCustom Maps \t \n\t2x Gather\t\t\t | \t2x Smelting\t\t| \t2x Crafting Times \n\tFaster Recycling\t\t | \tExtra Recyclers\t\t| \tTier 1 BPs Unlocked \n\n\t\t\t\tJunk items re",
-      "img": "https://link.platformsync.io/wr/Banner_2xMonthly_512x1024.png",
-      "url": "https://winterust.net/",
-      "notes": {},
-      "switches": {},
-      "alarms": {},
-      "storageMonitors": {},
-      "markers": {},
-      "switchGroups": {},
-      "battlemetricsId": "30669101",
-      "connect": "connect 94.231.215.7:28015",
-      "cargoShipEgressTimeMs": 3000000,
-      "oilRigLockedCrateUnlockTimeMs": 900000,
-      "timeTillDay": null,
-      "timeTillNight": null
-    }
-  },
-  "serverListLite": {
-    "94.231.215.7-28082": {
-      "76561198365871171": {
-        "serverIp": "94.231.215.7",
-        "appPort": "28082",
-        "steamId": "76561198365871171",
-        "playerToken": "-423603828"
-      }
-    }
-  }
+  "serverList": {},
+  "serverListLite": {}
 }
