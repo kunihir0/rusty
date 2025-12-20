@@ -10,21 +10,7 @@
       "img": "https://www.survivors.gg/temp/server2.png",
       "url": "https://shop.survivors.gg/products?tag=vip-packages",
       "notes": {},
-      "switches": {
-        "28350803": {
-          "active": false,
-          "reachable": true,
-          "name": "Smart Switch",
-          "command": "28350803",
-          "image": "smart_switch.png",
-          "autoDayNightOnOff": 0,
-          "location": null,
-          "x": null,
-          "y": null,
-          "server": "Survivors.gg #Medium [ 2x Vanilla ] FULLWIPED 18.12",
-          "proximity": 500
-        }
-      },
+      "switches": {},
       "alarms": {},
       "storageMonitors": {},
       "markers": {},

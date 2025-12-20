@@ -5,6 +5,26 @@ import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
 import { RustPlus } from "../../rustplus/ws";
 import { RECYCLING_RESOURCES, RESOURCE_NAMES } from "../../rustplus/utils/Recycling";
 
+async function findDeviceThread(guildId: string, threadName: string) {
+    if (!appState.pairingChannels.has(guildId)) return null;
+    const channel = appState.pairingChannels.get(guildId);
+    if (!channel) return null;
+
+    try {
+        // Try cache first
+        let thread = channel.threads.cache.find(t => t.name === threadName);
+        if (!thread) {
+            // Fetch active
+            const fetched = await channel.threads.fetch();
+            thread = fetched.threads.find(t => t.name === threadName);
+        }
+        return thread;
+    } catch (e) {
+        console.error("Error finding thread:", e);
+        return null;
+    }
+}
+
 export async function handleInteraction(interaction: Interaction) {
   if (interaction.isButton()) {
     console.log('FCM Handler State on button click:', appState.fcmHandler?.state);
@@ -495,19 +515,17 @@ export async function handleInteraction(interaction: Interaction) {
             switchData.name = newName;
             persistence.saveState(state);
 
-            if (interaction.guildId && appState.pairingChannels.has(interaction.guildId)) {
-                const channel = appState.pairingChannels.get(interaction.guildId);
-                const threadId = state.serverList[serverId!]?.discordThreadId;
-                if (threadId) {
-                    const thread = channel?.threads.cache.get(threadId);
-                    if (thread) {
-                        const messages = await thread.messages.fetch({ limit: 100 });
-                        const messageToUpdate = messages.find(m => m.embeds[0]?.fields[0]?.value === entityId.toString());
+            if (interaction.guildId) {
+                const threadName = `${state.serverList[serverId!].title} - Switches`;
+                const thread = await findDeviceThread(interaction.guildId, threadName);
+                
+                if (thread) {
+                    const messages = await thread.messages.fetch({ limit: 100 });
+                    const messageToUpdate = messages.find(m => m.embeds[0]?.fields[0]?.value === entityId.toString());
 
-                        if (messageToUpdate) {
-                            const updatedEmbed = new EmbedBuilder(messageToUpdate.embeds[0].data).setTitle(newName);
-                            await messageToUpdate.edit({ embeds: [updatedEmbed] });
-                        }
+                    if (messageToUpdate) {
+                        const updatedEmbed = new EmbedBuilder(messageToUpdate.embeds[0].data).setTitle(newName);
+                        await messageToUpdate.edit({ embeds: [updatedEmbed] });
                     }
                 }
             }
@@ -543,26 +561,24 @@ export async function handleInteraction(interaction: Interaction) {
             alarmData.message = newMessage;
             persistence.saveState(state);
 
-            if (interaction.guildId && appState.pairingChannels.has(interaction.guildId)) {
-                const channel = appState.pairingChannels.get(interaction.guildId);
-                const threadId = state.serverList[serverId!]?.discordThreadId;
-                if (threadId) {
-                    const thread = channel?.threads.cache.get(threadId);
-                    if (thread) {
-                        const messages = await thread.messages.fetch({ limit: 100 });
-                        const messageToUpdate = messages.find(m => m.embeds[0]?.fields[0]?.value === entityId.toString());
+            if (interaction.guildId) {
+                const threadName = `${state.serverList[serverId!].title} - Alarms`;
+                const thread = await findDeviceThread(interaction.guildId, threadName);
 
-                        if (messageToUpdate) {
-                            const updatedEmbed = new EmbedBuilder(messageToUpdate.embeds[0].data)
-                                .setTitle(newName)
-                                .setFields(
-                                    { name: 'Entity ID', value: entityId.toString(), inline: true },
-                                    { name: 'Location', value: alarmData.location || 'N/A', inline: true },
-                                    { name: 'Last Trigger', value: messageToUpdate.embeds[0].fields[2].value, inline: false },
-                                    { name: 'Message', value: newMessage, inline: false }
-                                );
-                            await messageToUpdate.edit({ embeds: [updatedEmbed] });
-                        }
+                if (thread) {
+                    const messages = await thread.messages.fetch({ limit: 100 });
+                    const messageToUpdate = messages.find(m => m.embeds[0]?.fields[0]?.value === entityId.toString());
+
+                    if (messageToUpdate) {
+                        const updatedEmbed = new EmbedBuilder(messageToUpdate.embeds[0].data)
+                            .setTitle(newName)
+                            .setFields(
+                                { name: 'Entity ID', value: entityId.toString(), inline: true },
+                                { name: 'Location', value: alarmData.location || 'N/A', inline: true },
+                                { name: 'Last Trigger', value: messageToUpdate.embeds[0].fields[2].value, inline: false },
+                                { name: 'Message', value: newMessage, inline: false }
+                            );
+                        await messageToUpdate.edit({ embeds: [updatedEmbed] });
                     }
                 }
             }
@@ -595,19 +611,17 @@ export async function handleInteraction(interaction: Interaction) {
             monitorData.name = newName;
             persistence.saveState(state);
 
-            if (interaction.guildId && appState.pairingChannels.has(interaction.guildId)) {
-                const channel = appState.pairingChannels.get(interaction.guildId);
-                const threadId = state.serverList[serverId!]?.discordThreadId;
-                if (threadId) {
-                    const thread = channel?.threads.cache.get(threadId);
-                    if (thread) {
-                        const messages = await thread.messages.fetch({ limit: 100 });
-                        const messageToUpdate = messages.find(m => m.embeds[0]?.fields[0]?.value === entityId.toString());
+            if (interaction.guildId) {
+                const threadName = `${state.serverList[serverId!].title} - Storage Monitors`;
+                const thread = await findDeviceThread(interaction.guildId, threadName);
 
-                        if (messageToUpdate) {
-                            const updatedEmbed = new EmbedBuilder(messageToUpdate.embeds[0].data).setTitle(newName);
-                            await messageToUpdate.edit({ embeds: [updatedEmbed] });
-                        }
+                if (thread) {
+                    const messages = await thread.messages.fetch({ limit: 100 });
+                    const messageToUpdate = messages.find(m => m.embeds[0]?.fields[0]?.value === entityId.toString());
+
+                    if (messageToUpdate) {
+                        const updatedEmbed = new EmbedBuilder(messageToUpdate.embeds[0].data).setTitle(newName);
+                        await messageToUpdate.edit({ embeds: [updatedEmbed] });
                     }
                 }
             }
