@@ -7,6 +7,8 @@ import path from "path";
 import { appState } from "./state/AppState";
 import { handleInteraction } from "./discord/interactions/InteractionHandler";
 import { handleFcmEvent } from "./discord/services/fcmIntegration";
+import { startBattlemetricsPolling } from "./discord/services/BattlemetricsManager";
+import { onDiscordMessage } from "./discord/services/TeamChatBridge";
 
 export const bot = new Client({
   // To use only guild command
@@ -91,6 +93,9 @@ bot.once("ready", async () => {
       log: (msg) => console.log(`[FCM Log] ${msg}`)
     });
     appState.fcmHandler.start();
+    
+    // Start Battlemetrics Polling
+    startBattlemetricsPolling();
   } else {
     console.warn("FCM config missing. Skipping FCM Handler.");
   }
@@ -105,5 +110,6 @@ bot.on("interactionCreate", async (interaction: Interaction) => {
 });
 
 bot.on("messageCreate", (message: Message) => {
+  onDiscordMessage(message);
   void bot.executeCommand(message);
 });

@@ -33,10 +33,11 @@ export interface BattlemetricsClient {
     server_port: number | null;
     
     // Methods
-    request: (api_call: string) => Promise<any>;
+    request: (api_call: string, options?: any) => Promise<any>;
     setup: () => Promise<void>;
     updateStreamerMode: () => Promise<void>;
     getServerIdFromName: (name: string) => Promise<number | null>;
+    getPlayerIdFromSteamId: (steamId: string) => Promise<{id: number, name: string} | null>;
     getProfileData: (playerId: string | number) => Promise<any[]>;
     evaluation: (data?: any, firstTime?: boolean) => Promise<boolean | null>;
     getOnlineTime: (playerId: string) => [number, string] | null;
@@ -134,6 +135,14 @@ export function createBattlemetricsClient(initialId: number | null, initialName:
         return `https://api.battlemetrics.com/servers?filter[search]=${name}&filter[game]=rust`;
     }
 
+    function SEARCH_PLAYER_API_CALL(search: string) {
+        return `https://api.battlemetrics.com/players?filter[search]=${search}&include=identifier&page[size]=10`;
+    }
+
+    function MATCH_PLAYER_API_CALL() {
+        return `https://api.battlemetrics.com/players/match`;
+    }
+
     function GET_SERVER_DATA_API_CALL(id: number) {
         return `https://api.battlemetrics.com/servers/${id}?include=player`;
     }
@@ -157,10 +166,20 @@ export function createBattlemetricsClient(initialId: number | null, initialName:
     }
 
     // REPLACED AXIOS WITH FETCH
-    async function _request(api_call: string) {
+    async function _request(api_call: string, options: any = {}) {
         try {
-            const response = await fetch(api_call);
-            // Attempt to parse JSON. If parsing fails (e.g. invalid JSON), return null for data.
+            const token = process.env.BATTLEMETRICS_TOKEN;
+            const headers = options.headers || {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            // Add JSON content type for POST if not set
+            if (options.method === 'POST' && !headers['Content-Type']) {
+                headers['Content-Type'] = 'application/json';
+            }
+
+            const response = await fetch(api_call, { ...options, headers });
             const data = await response.json().catch(() => null);
 
             return {
@@ -169,6 +188,7 @@ export function createBattlemetricsClient(initialId: number | null, initialName:
             };
         }
         catch (e) {
+            console.error("[Battlemetrics] Request Error:", e);
             return null;
         }
     }
@@ -284,10 +304,10 @@ export function createBattlemetricsClient(initialId: number | null, initialName:
 
     // Public Methods
 
-    async function request(api_call: string) {
+    async function request(api_call: string, options: any = {}) {
         if (_id === null) return null;
 
-        const response = await _request(api_call);
+        const response = await _request(api_call, options);
 
         if (!response || !response.status || response.status !== 200) {
             console.error(`Battlemetrics API request failed: ${api_call}`);
@@ -341,6 +361,86 @@ export function createBattlemetricsClient(initialId: number | null, initialName:
         for (const server of response.data.data) {
             if (server.attributes.name === originalName) {
                 return server.id;
+            }
+        }
+
+        return null;
+    }
+
+    async function getPlayerIdFromSteamId(steamId: string, playerName?: string): Promise<{id: number, name: string} | null> {
+        // Try exact match first using POST /players/match
+        const matchUrl = MATCH_PLAYER_API_CALL();
+        const body = {
+            data: [
+                {
+                    type: "identifier",
+                    attributes: {
+                        type: "steamID",
+                        identifier: steamId
+                    }
+                }
+            ]
+        };
+
+        console.log(`[Battlemetrics] Matching SteamID: ${steamId}`);
+        const matchResponse = await _request(matchUrl, {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+
+        if (matchResponse && matchResponse.status === 200 && matchResponse.data && matchResponse.data.data) {
+             const data = matchResponse.data.data;
+             if (data.length > 0) {
+                 const player = data[0];
+                 console.log(`[Battlemetrics] Match Found: ${player.attributes.name} (${player.id})`);
+                 return {
+                     id: parseInt(player.id),
+                     name: player.attributes.name
+                 };
+             } else {
+                 console.log(`[Battlemetrics] No match found for ${steamId}`);
+             }
+        } else {
+             console.log(`[Battlemetrics] Match failed status: ${matchResponse?.status}`);
+        }
+
+        // Fallback to Search ID
+        console.log(`[Battlemetrics] Fallback to Search for ID: ${steamId}`);
+        const search = SEARCH_PLAYER_API_CALL(steamId);
+        const response = await _request(search);
+
+        if (response && response.status === 200 && response.data && response.data.data && response.data.data.length > 0) {
+            const player = response.data.data[0];
+            console.log(`[Battlemetrics] Found via Search ID: ${player.attributes.name} (${player.id})`);
+            return {
+                id: parseInt(player.id),
+                name: player.attributes.name
+            };
+        }
+
+        // Fallback to Search Name
+        if (playerName) {
+            console.log(`[Battlemetrics] Fallback to Search for Name: ${playerName}`);
+            const searchName = SEARCH_PLAYER_API_CALL(encodeURIComponent(playerName));
+            const responseName = await _request(searchName);
+            
+            if (responseName && responseName.status === 200 && responseName.data && responseName.data.data && responseName.data.data.length > 0) {
+                // Try to find exact name match
+                for (const p of responseName.data.data) {
+                    if (p.attributes.name === playerName) {
+                         console.log(`[Battlemetrics] Found via Name Exact Match: ${p.attributes.name} (${p.id})`);
+                         return {
+                            id: parseInt(p.id),
+                            name: p.attributes.name
+                        };
+                    }
+                }
+                const player = responseName.data.data[0];
+                console.log(`[Battlemetrics] Found via Name Search (Best Guess): ${player.attributes.name} (${player.id})`);
+                return {
+                    id: parseInt(player.id),
+                    name: player.attributes.name
+                };
             }
         }
 
@@ -681,6 +781,7 @@ export function createBattlemetricsClient(initialId: number | null, initialName:
         setup,
         updateStreamerMode,
         getServerIdFromName,
+        getPlayerIdFromSteamId,
         getProfileData,
         evaluation,
         getOnlineTime,

@@ -1,0 +1,369 @@
+import { createBattlemetricsClient, BattlemetricsClient } from "../../rustplus/services/battlemetrics";
+import { appState } from "../../state/AppState";
+import { EmbedBuilder, Colors, TextChannel, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from "discord.js";
+import { TeamDetectorService } from "./TeamDetectorService";
+import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
+import { SteamService } from "../../rustplus/services/SteamService";
+import path from "path";
+
+const clients = new Map<string, BattlemetricsClient>();
+const teamDetector = new TeamDetectorService();
+const steamService = new SteamService();
+
+interface WatchEntry {
+    steamId: string;
+    name: string; // Steam Name (used for matching)
+    addedAt: number;
+}
+
+// Persistence Setup
+const watchlistPath = path.join(process.cwd(), 'watchlist.json');
+const persistence = new JsonPersistenceManager(watchlistPath);
+
+// Initialize Watchlist
+let saved = persistence.loadState();
+if (!saved.players) saved = { players: {} };
+
+// Migration: Check for old string format (Name -> SteamID)
+const migratedPlayers: Record<string, WatchEntry> = {};
+let migrationNeeded = false;
+
+for (const [key, value] of Object.entries(saved.players)) {
+    if (typeof value === 'string') {
+        // Old format: key=Name, value=SteamID
+        // New format: key=SteamID, value=WatchEntry
+        migratedPlayers[value] = {
+            steamId: value,
+            name: key,
+            addedAt: Date.now()
+        };
+        migrationNeeded = true;
+    } else {
+        // New format: key=SteamID, value=WatchEntry
+        if (value && typeof value === 'object' && (value as any).steamId) {
+             migratedPlayers[key] = value as WatchEntry;
+        }
+    }
+}
+
+if (migrationNeeded) {
+    saved.players = migratedPlayers;
+    persistence.saveState(saved);
+    console.log("[Watchlist] Migrated legacy watchlist data to new format.");
+}
+
+// Key: Steam ID -> Entry
+const watchedPlayers = new Map<string, WatchEntry>(Object.entries(saved.players));
+
+// UI State
+let dashboardMessageId: string | null = saved.dashboardMessageId || null;
+let dashboardThreadId: string | null = saved.dashboardThreadId || null;
+
+function saveWatchlist() {
+    persistence.saveState({
+        players: Object.fromEntries(watchedPlayers),
+        dashboardMessageId,
+        dashboardThreadId
+    });
+}
+
+export function startBattlemetricsPolling() {
+    console.log("Starting Battlemetrics Polling Service...");
+    console.log(`Loaded ${watchedPlayers.size} players in watchlist.`);
+    // Initial Dashboard Update
+    updateWatchlistDashboard();
+    
+    runLoop();
+    setInterval(runLoop, 60000);
+}
+
+export async function addToWatchList(inputSteamId: string): Promise<{ success: boolean, message: string }> {
+    try {
+        // 1. Resolve Steam Name
+        let steamId = inputSteamId;
+        // Basic cleanup if user pasted url
+        if (steamId.includes('/profiles/')) {
+            const match = steamId.match(/profiles\/(\d+)/);
+            if (match) steamId = match[1];
+        }
+        
+        const steamName = await steamService.getProfileName(steamId);
+        if (!steamName || steamName === 'Unknown') {
+            return { success: false, message: "Could not find Steam Profile." };
+        }
+
+        // 2. Add to Watchlist (Local Match Mode)
+        const entry: WatchEntry = {
+            steamId: steamId,
+            name: steamName, 
+            addedAt: Date.now()
+        };
+
+        watchedPlayers.set(entry.steamId, entry);
+        saveWatchlist();
+        updateWatchlistDashboard(); // Update UI
+
+        console.log(`[Watchlist] Added ${entry.name} (${entry.steamId})`);
+        return { success: true, message: `Added **${entry.name}** (${entry.steamId}) to watchlist.` };
+
+    } catch (e: any) {
+        console.error("Error adding to watchlist:", e);
+        return { success: false, message: `Error: ${e.message}` };
+    }
+}
+
+export function removeFromWatchList(nameOrId: string): boolean {
+    // Allow removing by Name or Steam ID
+    let foundKey: string | null = null;
+    
+    if (watchedPlayers.has(nameOrId)) {
+        foundKey = nameOrId;
+    } else {
+        // Search by name
+        for (const [key, entry] of watchedPlayers) {
+            if (entry.name.toLowerCase() === nameOrId.toLowerCase()) {
+                foundKey = key;
+                break;
+            }
+        }
+    }
+
+    if (foundKey) {
+        const entry = watchedPlayers.get(foundKey)!;
+        watchedPlayers.delete(foundKey);
+        saveWatchlist();
+        updateWatchlistDashboard();
+        console.log(`[Watchlist] Removed ${entry.name}`);
+        return true;
+    }
+    return false;
+}
+
+export function getWatchList(): Map<string, WatchEntry> {
+    return watchedPlayers;
+}
+
+export async function refreshDashboard() {
+    console.log("[Watchlist] Manually refreshing dashboard...");
+    // Try to delete old message if exists
+    if (dashboardMessageId && dashboardThreadId) {
+        try {
+            const guildId = appState.pairingChannels.keys().next().value;
+            if (guildId) {
+                const channel = appState.pairingChannels.get(guildId);
+                const thread = await channel?.threads.fetch(dashboardThreadId).catch(() => null);
+                if (thread) {
+                    const msg = await thread.messages.fetch(dashboardMessageId).catch(() => null);
+                    if (msg) await msg.delete();
+                }
+            }
+        } catch (e) {
+            console.error("Error clearing old dashboard:", e);
+        }
+    }
+    
+    dashboardMessageId = null;
+    // Force update will create new message since ID is null
+    await updateWatchlistDashboard();
+}
+
+// --- Dashboard Logic ---
+async function updateWatchlistDashboard() {
+    // We need a channel. Use the first pairing channel found.
+    const guildId = appState.pairingChannels.keys().next().value;
+    if (!guildId) return;
+    const channel = appState.pairingChannels.get(guildId);
+    if (!channel) return;
+
+    try {
+        // 1. Ensure Thread
+        let thread;
+        if (dashboardThreadId) {
+            thread = await channel.threads.fetch(dashboardThreadId).catch(() => null);
+        }
+        
+        if (!thread) {
+            // Find by name or create
+            const fetched = await channel.threads.fetch();
+            thread = fetched.threads.find(t => t.name === "MSS Watchlist");
+            
+            if (!thread) {
+                thread = await channel.threads.create({
+                    name: "MSS Watchlist",
+                    autoArchiveDuration: 10080,
+                    reason: "MSS Watchlist Dashboard"
+                });
+            }
+            dashboardThreadId = thread.id;
+            saveWatchlist();
+        }
+
+        // 2. Build Embed (Grouped)
+        const embed = new EmbedBuilder()
+            .setTitle("🛡️ MSS Watchlist Dashboard")
+            .setColor(Colors.Blue)
+            .setTimestamp()
+            .setFooter({ text: `Tracking ${watchedPlayers.size} players` });
+
+        const onlineLines: string[] = [];
+        const offlineLines: string[] = [];
+        const removeOptions: any[] = [];
+
+        for (const [key, entry] of watchedPlayers) { // Key is SteamID
+            let isOnline = false;
+            let serverName = "";
+            
+            for (const client of clients.values()) {
+                const onlineNames = client.onlinePlayers.map((id: string) => client.players[id]?.name);
+                if (onlineNames.includes(entry.name)) {
+                    isOnline = true;
+                    serverName = client.name || "Unknown Server";
+                    break;
+                }
+            }
+
+            const timeAdded = `<t:${Math.floor(entry.addedAt / 1000)}:R>`;
+            const line = `**[${entry.name}](https://steamcommunity.com/profiles/${entry.steamId})** • Added ${timeAdded}`;
+
+            if (isOnline) {
+                onlineLines.push(`🟢 ${line} @ **${serverName}**`);
+            } else {
+                offlineLines.push(`🔴 ${line}`);
+            }
+
+            // Populate Select Menu Options
+            removeOptions.push({
+                label: entry.name,
+                description: `SteamID: ${entry.steamId}`,
+                value: entry.steamId // Use SteamID as value for removal
+            });
+        }
+
+        if (onlineLines.length > 0) embed.addFields({ name: `🟢 Online (${onlineLines.length})`, value: onlineLines.join('\n').substring(0, 1024) });
+        if (offlineLines.length > 0) embed.addFields({ name: `🔴 Offline (${offlineLines.length})`, value: offlineLines.join('\n').substring(0, 1024) });
+        if (watchedPlayers.size === 0) embed.setDescription("Watchlist is empty.");
+
+        // 3. Build Components
+        const components: any[] = [];
+        
+        // Row 1: Refresh Button
+        const row1 = new ActionRowBuilder<ButtonBuilder>()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('watchlist-refresh')
+                    .setLabel('Refresh Status')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('🔄')
+            );
+        components.push(row1);
+
+        // Row 2: Remove Select Menu (if players exist)
+        if (removeOptions.length > 0) {
+            // Discord limits select options to 25.
+            const slicedOptions = removeOptions.slice(0, 25);
+            const row2 = new ActionRowBuilder<StringSelectMenuBuilder>()
+                .addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('watchlist-remove-menu')
+                        .setPlaceholder('Select player to remove...')
+                        .addOptions(slicedOptions)
+                );
+            components.push(row2);
+        }
+
+        // 4. Ensure Message
+        if (dashboardMessageId) {
+            try {
+                const message = await thread.messages.fetch(dashboardMessageId);
+                if (message) {
+                    await message.edit({ embeds: [embed], components: components });
+                    return;
+                }
+            } catch (e) {
+                // Message lost
+            }
+        }
+
+        // Create new message
+        const message = await thread.send({ embeds: [embed], components: components });
+        dashboardMessageId = message.id;
+        saveWatchlist();
+
+    } catch (e) {
+        console.error("Failed to update Watchlist Dashboard:", e);
+    }
+}
+
+async function runLoop() {
+    if (!appState.fcmHandler) return;
+    
+    const state = appState.fcmHandler.state;
+    let needsDashboardUpdate = false;
+
+    for (const [serverId, server] of Object.entries(state.serverList)) {
+        if (!server.battlemetricsId) continue;
+
+        let client = clients.get(serverId);
+        
+        try {
+            if (!client) {
+                // Initialize
+                console.log(`[Battlemetrics] Initializing client for ${server.title} (${server.battlemetricsId})`);
+                client = createBattlemetricsClient(parseInt(server.battlemetricsId), null);
+                await client.setup();
+                clients.set(serverId, client);
+            } else {
+                // Update
+                const success = await client.evaluation();
+                if (success) {
+                    if (client.loginPlayers.length > 0 || client.logoutPlayers.length > 0) {
+                        needsDashboardUpdate = true;
+                    }
+                }
+            }
+
+            // --- Feature: Player Activity Log & Detection ---
+            if (client.loginPlayers.length > 0) {
+                const namesArray = client.loginPlayers.map((id: string) => client!.players[id]?.name || id);
+                
+                // Detection: Check if any joining player matches a watched NAME
+                const onlineNames = new Set(client.onlinePlayers.map((id: string) => client!.players[id]?.name));
+                
+                for (const joinedName of namesArray) {
+                    // Iterate watchlist entries
+                    for (const entry of watchedPlayers.values()) {
+                        if (entry.name === joinedName) {
+                            console.log(`[Watchlist] Watched player ${entry.name} detected on ${server.title}!`);
+                            
+                            // Run detection
+                            teamDetector.detectTeam(entry.steamId, onlineNames).then(teammates => {
+                                if (teammates.length > 0) {
+                                    const teamEmbed = new EmbedBuilder()
+                                        .setTitle(`🚨 Watched Player Detected: ${entry.name}`)
+                                        .setColor(Colors.Red)
+                                        .setDescription(`**Server:** ${server.title}\n**Found ${teammates.length} potential teammates online:**`)
+                                        .addFields({
+                                            name: 'Teammates',
+                                            value: teammates.map(p => `${p.name} (${p.steam_id})`).join('\n').substring(0, 1024)
+                                        })
+                                        .setTimestamp();
+                                    
+                                    for (const channel of appState.pairingChannels.values()) {
+                                        channel.send({ embeds: [teamEmbed] });
+                                    }
+                                }
+                            }).catch(err => console.error("[Watchlist] Detection failed:", err));
+                        }
+                    }
+                }
+            }
+
+        } catch (e) {
+            console.error(`[Battlemetrics] Error updating ${server.title}:`, e);
+        }
+    }
+
+    if (needsDashboardUpdate) {
+        updateWatchlistDashboard();
+    }
+}

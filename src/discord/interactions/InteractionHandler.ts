@@ -1,24 +1,26 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, ComponentType, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, TextInputBuilder, TextInputStyle, type Interaction } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, ComponentType, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, TextInputBuilder, TextInputStyle, type Interaction, ThreadChannel, type MessageActionRowComponent, type APIButtonComponentWithCustomId } from "discord.js";
 import path from "path";
 import { appState } from "../../state/AppState";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
 import { RustPlus } from "../../rustplus/ws";
 import { RECYCLING_RESOURCES, RESOURCE_NAMES } from "../../rustplus/utils/Recycling";
+import { refreshDashboard, removeFromWatchList } from "../services/BattlemetricsManager";
+import { connectToRustServer } from "../services/RustPlusManager";
 
-async function findDeviceThread(guildId: string, threadName: string) {
+async function findDeviceThread(guildId: string, threadName: string): Promise<ThreadChannel | null> {
     if (!appState.pairingChannels.has(guildId)) return null;
     const channel = appState.pairingChannels.get(guildId);
     if (!channel) return null;
 
     try {
         // Try cache first
-        let thread = channel.threads.cache.find(t => t.name === threadName);
+        let thread = channel.threads.cache.find(t => t.name === threadName) as ThreadChannel;
         if (!thread) {
             // Fetch active
             const fetched = await channel.threads.fetch();
-            thread = fetched.threads.find(t => t.name === threadName);
+            thread = fetched.threads.find(t => t.name === threadName) as ThreadChannel;
         }
-        return thread;
+        return thread || null;
     } catch (e) {
         console.error("Error finding thread:", e);
         return null;
@@ -27,8 +29,15 @@ async function findDeviceThread(guildId: string, threadName: string) {
 
 export async function handleInteraction(interaction: Interaction) {
   if (interaction.isButton()) {
-    console.log('FCM Handler State on button click:', appState.fcmHandler?.state);
     const customId = interaction.customId;
+
+    // Watchlist Handlers
+    if (customId === 'watchlist-refresh') {
+        await interaction.deferReply({ ephemeral: true });
+        await refreshDashboard();
+        await interaction.editReply("Dashboard refreshed.");
+        return;
+    }
 
     if (customId.startsWith("pair-") || customId.startsWith("disconnect-") || customId.startsWith("remove-")) {
       const serverId = customId.substring(customId.indexOf('-') + 1);
@@ -43,14 +52,10 @@ export async function handleInteraction(interaction: Interaction) {
       if (customId.startsWith("pair-")) {
         await interaction.deferUpdate();
         try {
-          if (appState.rustPlus) {
-            appState.rustPlus.disconnect();
-          }
-
-          const newRustPlus = new RustPlus(server.serverIp, server.appPort, server.steamId, server.playerToken);
-          appState.rustPlus = newRustPlus;
+          // Use Manager to connect
+          const newRustPlus = await connectToRustServer(serverId);
           
-          newRustPlus.on('connected', async () => {
+          newRustPlus.once('connected', async () => {
             console.log(`Successfully paired with ${server.title}`);
             const row = new ActionRowBuilder<ButtonBuilder>()
               .addComponents(
@@ -62,12 +67,11 @@ export async function handleInteraction(interaction: Interaction) {
             await interaction.editReply({ components: [row] });
           });
 
-          newRustPlus.on('error', async (e) => {
+          newRustPlus.once('error', async (e) => {
             console.error(`Failed to pair with ${server.title}:`, e);
             await interaction.followUp({ content: `Failed to connect: ${e.message}`, flags: [64] });
           });
 
-          newRustPlus.connect();
         } catch (e: any) {
           console.error("Pairing failed:", e);
           await interaction.followUp({ content: `An error occurred during pairing: ${e.message}`, flags: [64] });
@@ -142,17 +146,14 @@ export async function handleInteraction(interaction: Interaction) {
                  }
 
                  if (targetServerId && state) {
-                    const server = state.serverList[targetServerId];
                     try {
-                        if (appState.rustPlus) appState.rustPlus.disconnect();
-                        
-                        appState.rustPlus = new RustPlus(server.serverIp, server.appPort, server.steamId, server.playerToken);
-                        appState.rustPlus.connect();
+                        // Use Manager to connect
+                        const newRustPlus = await connectToRustServer(targetServerId);
                         
                         await new Promise<void>((resolve, reject) => {
                             const t = setTimeout(() => reject(new Error("Timeout")), 5000);
-                            appState.rustPlus!.once('connected', () => { clearTimeout(t); resolve(); });
-                            appState.rustPlus!.once('error', (e) => { clearTimeout(t); reject(e); });
+                            newRustPlus.once('connected', () => { clearTimeout(t); resolve(); });
+                            newRustPlus.once('error', (e) => { clearTimeout(t); reject(e); });
                         });
                     } catch (e: any) {
                         await interaction.reply({ content: `Failed to connect: ${e.message}`, flags: [64] });
@@ -187,7 +188,9 @@ export async function handleInteraction(interaction: Interaction) {
 
             const newState = !switchState.active;
             appState.rustPlus!.setEntityValue(entityId, newState, (response) => {
-                if (!response.response.error) {
+                if (!response.response || response.response.error) {
+                    interaction.followUp({ content: `Error toggling switch: ${response.response?.error?.error || 'Unknown Error'}`, flags: [64] });
+                } else {
                     switchState.active = newState;
                     
                     const updatedEmbed = new EmbedBuilder(interaction.message.embeds[0].data)
@@ -207,12 +210,10 @@ export async function handleInteraction(interaction: Interaction) {
                     
                     const components: any[] = [updatedRow];
                     if (interaction.message.components.length > 1) {
-                        components.push(ActionRowBuilder.from(interaction.message.components[1]));
+                        components.push(ActionRowBuilder.from(interaction.message.components[1] as any) as any);
                     }
 
                     interaction.editReply({ embeds: [updatedEmbed], components: components });
-                } else {
-                    interaction.followUp({ content: `Error toggling switch: ${response.response.error.error}`, flags: [64] });
                 }
             });
         } else if (action === 'edit') {
@@ -287,10 +288,11 @@ export async function handleInteraction(interaction: Interaction) {
                 alarm.everyone = !alarm.everyone;
                 persistence.saveState(state);
 
+                const firstRow = interaction.message.components[0] as any;
                 const newRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    interaction.message.components[0].components.map(c => {
-                        const newC = ButtonBuilder.from(c as ButtonBuilder);
-                        if (newC.data.custom_id === customId) {
+                    firstRow.components.map((c: any) => {
+                        const newC = ButtonBuilder.from(c);
+                        if ((newC.data as any).custom_id === customId) {
                             newC.setStyle(alarm.everyone ? ButtonStyle.Success : ButtonStyle.Secondary);
                         }
                         return newC;
@@ -384,10 +386,11 @@ export async function handleInteraction(interaction: Interaction) {
                 }
                 persistence.saveState(state);
 
+                const firstRow = interaction.message.components[0] as any;
                 const newRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    interaction.message.components[0].components.map(c => {
-                        const newC = ButtonBuilder.from(c as ButtonBuilder);
-                        if (newC.data.custom_id === customId) {
+                    firstRow.components.map((c: any) => {
+                        const newC = ButtonBuilder.from(c);
+                        if ((newC.data as any).custom_id === customId) {
                             const currentStatus = action === 'ingame' ? monitor.inGame : monitor.everyone;
                             newC.setStyle(currentStatus ? ButtonStyle.Success : ButtonStyle.Secondary);
                         }
@@ -631,6 +634,19 @@ export async function handleInteraction(interaction: Interaction) {
         }
     }
   } else if (interaction.isStringSelectMenu()) {
+    if (interaction.customId === 'watchlist-remove-menu') {
+        const selectedValue = interaction.values[0];
+        await interaction.deferReply({ ephemeral: true });
+        
+        const removed = removeFromWatchList(selectedValue);
+        if (removed) {
+            await interaction.editReply(`Removed **${selectedValue}** from watchlist.`);
+        } else {
+            await interaction.editReply(`Could not find ${selectedValue} in watchlist.`);
+        }
+        return;
+    }
+
     if (interaction.customId.startsWith('switch-auto-')) {
         const entityId = parseInt(interaction.customId.split('-')[2], 10);
         const selectedValue = interaction.values[0];
@@ -662,15 +678,17 @@ export async function handleInteraction(interaction: Interaction) {
             const currentRows = interaction.message.components;
             
             const newRows = currentRows.map(row => {
-                const selectComponent = row.components.find(c => c.type === ComponentType.StringSelect);
+                const selectComponent = (row as any).components.find((c: any) => c.type === ComponentType.StringSelect);
                 if (selectComponent && (selectComponent as any).customId === interaction.customId) {
                         const newSelect = StringSelectMenuBuilder.from(selectComponent as any);
                         
                         const options = newSelect.options;
-                        const selectedOption = options.find(o => o.value === selectedValue);
-                        // Access label from data property if necessary, or directly if typed correctly. 
-                        // StringSelectMenuOptionBuilder / APISelectMenuOption usually has label.
-                        const newLabel = selectedOption ? selectedOption.data.label : 'OFF';
+                        const selectedOption = options.find(o => {
+                            const opt = o as any;
+                            return (opt.value === selectedValue) || (opt.data && opt.data.value === selectedValue);
+                        });
+                        
+                        const newLabel = selectedOption ? ((selectedOption as any).label || (selectedOption as any).data?.label) : 'OFF';
                         
                         newSelect.setPlaceholder(`AUTO SETTING: ${newLabel}`);
                         return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(newSelect);
@@ -678,7 +696,7 @@ export async function handleInteraction(interaction: Interaction) {
                 return ActionRowBuilder.from(row as any);
             });
 
-            await interaction.editReply({ embeds: [currentEmbed], components: newRows });
+            await interaction.editReply({ embeds: [currentEmbed], components: newRows as any });
         } else {
                 await interaction.followUp({ content: "Switch not found.", flags: [64] });
         }
