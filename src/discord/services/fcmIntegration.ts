@@ -228,5 +228,54 @@ export async function handleFcmEvent(type: string, data: any) {
 
             await thread.send({ content: content || undefined, embeds: [embed] });
         }
+    } else if (type === 'PLAYER_DEATH') {
+        // data: { title, message, body, targetImage }
+        // Find 'Team Chat' thread
+        // We don't have serverId directly in the event data from fcmHandler for PLAYER_DEATH usually?
+        // Wait, fcmHandler calls onEvent('PLAYER_DEATH', { ... })
+        // It doesn't pass serverId explicitly in the object, but it knows it contextually?
+        // Actually fcmHandler.ts _playerDeath doesn't inject serverId. 
+        // We might need to iterate all servers or infer it.
+        // However, the bot likely only connects to one server or few.
+        // Let's iterate all pairing channels and find matching threads.
+        
+        for (const channel of appState.pairingChannels.values()) {
+            // We'll try to find *any* Team Chat thread.
+            // Since we don't know the exact server from FCM payload alone easily (unless we map Android ID -> Server),
+            // we will broadcast to all 'Team Chat' threads we can find.
+            // A better way would be to pass serverId from fcmHandler if possible, but let's stick to simple for now.
+            
+            const fetched = await channel.threads.fetch();
+            // Filter threads ending in "- Team Chat"
+            const teamThreads = fetched.threads.filter(t => t.name.endsWith(" - Team Chat"));
+            
+            for (const thread of teamThreads.values()) {
+                const embed = new EmbedBuilder()
+                    .setColor(Colors.Red)
+                    .setTitle(data.title)
+                    .setDescription(data.message)
+                    .setThumbnail(data.targetImage)
+                    .setTimestamp();
+                
+                await thread.send({ embeds: [embed] });
+            }
+        }
+    } else if (type === 'TEAM_LOGIN') {
+        // data: { title, message, body, targetImage }
+        for (const channel of appState.pairingChannels.values()) {
+            const fetched = await channel.threads.fetch();
+            const teamThreads = fetched.threads.filter(t => t.name.endsWith(" - Team Chat"));
+            
+            for (const thread of teamThreads.values()) {
+                const embed = new EmbedBuilder()
+                    .setColor(Colors.Green)
+                    .setTitle(data.title) // e.g. "Player is now online"
+                    .setDescription(data.message)
+                    .setThumbnail(data.targetImage)
+                    .setTimestamp();
+                
+                await thread.send({ embeds: [embed] });
+            }
+        }
     }
 }

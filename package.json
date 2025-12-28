@@ -19,6 +19,7 @@
     "discordx": "^11.13.2",
     "dotenv": "^17.2.3",
     "push-receiver": "^2.1.1",
+    "sharp": "^0.34.5",
     "ws": "^8.18.3"
   },
   "devDependencies": {
