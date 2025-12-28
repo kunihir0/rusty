@@ -9,3 +9,14 @@ yarn.lock
 build
 node_modules
 ref
+
+# system files
+.DS_Store
+Thumbs.db
+
+# local state files
+*.log
+*.local
+fcm-state.json
+watchlist.json
+extracted_features

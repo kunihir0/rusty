@@ -455,14 +455,41 @@ export function createFcmHandler(config: FcmHandlerConfig) {
 
     function _alarmAlarm(title: string, message: string, body: any) {
         const serverId = `${body.ip}-${body.port}`;
-        const entityId = body.entityId;
+        let entityId = body.entityId;
         const server = state.serverList[serverId];
         
-        if (!server || (server && !server.alarms[entityId])) return;
+        if (!server) return;
 
-        // In original code, this only notifies if fcmAlarmNotificationEnabled is true and NOT connected to the server via RustPlus.
-        // Here we just emit the event, letting the consumer decide.
-        
+        // Fallback: Find by name if entityId is missing
+        if (!entityId) {
+             const alarmIds = Object.keys(server.alarms);
+             
+             // Strategy 1: Exact Name Match
+             for (const id of alarmIds) {
+                 if (server.alarms[id].name === title) {
+                     entityId = id;
+                     break;
+                 }
+             }
+
+             // Strategy 2: "Alarm" vs "Smart Alarm" mismatch
+             if (!entityId && title === 'Alarm') {
+                for (const id of alarmIds) {
+                     if (server.alarms[id].name === 'Smart Alarm') {
+                         entityId = id;
+                         break;
+                     }
+                 }
+             }
+
+             // Strategy 3: Single Alarm Fallback
+             if (!entityId && alarmIds.length === 1) {
+                 entityId = alarmIds[0];
+             }
+        }
+
+        if (!entityId || !server.alarms[entityId]) return;
+
         if (server.alarms[entityId]) {
             server.alarms[entityId].lastTrigger = Math.floor(new Date().getTime() / 1000);
         }

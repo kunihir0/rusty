@@ -27,7 +27,7 @@ async function findDeviceThread(guildId: string, threadName: string): Promise<Th
     }
 }
 
-export async function handleInteraction(interaction: Interaction) {
+export async function handleInteraction(interaction: Interaction): Promise<boolean> {
   if (interaction.isButton()) {
     const customId = interaction.customId;
 
@@ -36,7 +36,7 @@ export async function handleInteraction(interaction: Interaction) {
         await interaction.deferReply({ ephemeral: true });
         await refreshDashboard();
         await interaction.editReply("Dashboard refreshed.");
-        return;
+        return true;
     }
 
     if (customId.startsWith("pair-") || customId.startsWith("disconnect-") || customId.startsWith("remove-")) {
@@ -44,7 +44,7 @@ export async function handleInteraction(interaction: Interaction) {
       
       if (!appState.fcmHandler || !appState.fcmHandler.state.serverList[serverId]) {
         await interaction.reply({ content: "Server data not found. It might be stale.", flags: [64] });
-        return;
+        return true;
       }
 
       const server = appState.fcmHandler.state.serverList[serverId];
@@ -126,7 +126,7 @@ export async function handleInteraction(interaction: Interaction) {
             await interaction.editReply(`An error occurred while removing the server: ${e.message}`);
         }
       }
-      return; // Stop further processing
+      return true; // Stop further processing
     } else if (customId.startsWith("switch-")) {
         const action = customId.split('-')[1];
         const entityId = parseInt(customId.split('-')[2], 10);
@@ -157,11 +157,11 @@ export async function handleInteraction(interaction: Interaction) {
                         });
                     } catch (e: any) {
                         await interaction.reply({ content: `Failed to connect: ${e.message}`, flags: [64] });
-                        return;
+                        return true;
                     }
                  } else {
                      await interaction.reply({ content: "Not connected and cannot find server for this switch.", flags: [64] });
-                     return;
+                     return true;
                  }
             }
             
@@ -183,7 +183,7 @@ export async function handleInteraction(interaction: Interaction) {
             const switchState = currentServerId ? appState.fcmHandler?.state.serverList[currentServerId]?.switches[entityId] : undefined;
             if (!switchState) {
                 await interaction.followUp({ content: "Switch data not found.", flags: [64]});
-                return;
+                return true;
             }
 
             const newState = !switchState.active;
@@ -229,7 +229,7 @@ export async function handleInteraction(interaction: Interaction) {
 
             modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput));
             await interaction.showModal(modal);
-            return;
+            return true;
 
         } else if (action === 'remove') {
             await interaction.deferReply({ ephemeral: true });
@@ -260,7 +260,7 @@ export async function handleInteraction(interaction: Interaction) {
                 await interaction.editReply(`An error occurred while removing the switch: ${e.message}`);
             }
         }
-        return;
+        return true;
     } else if (customId.startsWith("alarm-")) {
         const action = customId.split('-')[1];
         const entityId = parseInt(customId.split('-')[2], 10);
@@ -325,7 +325,7 @@ export async function handleInteraction(interaction: Interaction) {
                 new ActionRowBuilder<TextInputBuilder>().addComponents(messageInput)
             );
             await interaction.showModal(modal);
-            return;
+            return true;
         } else if (action === 'remove') {
             await interaction.deferReply({ ephemeral: true });
             try {
@@ -355,7 +355,7 @@ export async function handleInteraction(interaction: Interaction) {
                 await interaction.editReply(`An error occurred while removing the alarm: ${e.message}`);
             }
         }
-        return;
+        return true;
     } else if (customId.startsWith("monitor-")) {
         const action = customId.split('-')[1];
         const entityId = parseInt(customId.split('-')[2], 10);
@@ -404,7 +404,7 @@ export async function handleInteraction(interaction: Interaction) {
         } else if (action === 'recycle') {
             if (!appState.rustPlus || !appState.rustPlus.isConnected()) {
                 await interaction.reply({ content: "Not connected to a Rust server.", flags: [64]});
-                return;
+                return true;
             }
 
             await interaction.deferReply({ ephemeral: true });
@@ -461,7 +461,7 @@ export async function handleInteraction(interaction: Interaction) {
 
             modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput));
             await interaction.showModal(modal);
-            return;
+            return true;
         } else if (action === 'remove') {
             await interaction.deferReply({ ephemeral: true });
             try {
@@ -491,6 +491,7 @@ export async function handleInteraction(interaction: Interaction) {
                 await interaction.editReply(`An error occurred while removing the monitor: ${e.message}`);
             }
         }
+        return true;
     }
   } else if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('edit-switch-modal-')) {
@@ -537,6 +538,7 @@ export async function handleInteraction(interaction: Interaction) {
         } else {
             await interaction.editReply("Could not find the switch to update.");
         }
+        return true;
     } else if (interaction.customId.startsWith('edit-alarm-modal-')) {
         const entityId = parseInt(interaction.customId.split('-')[3], 10);
         const newName = interaction.fields.getTextInputValue('name');
@@ -589,6 +591,7 @@ export async function handleInteraction(interaction: Interaction) {
         } else {
             await interaction.editReply("Could not find the alarm to update.");
         }
+        return true;
     } else if (interaction.customId.startsWith('edit-monitor-modal-')) {
         const entityId = parseInt(interaction.customId.split('-')[3], 10);
         const newName = interaction.fields.getTextInputValue('name');
@@ -632,6 +635,7 @@ export async function handleInteraction(interaction: Interaction) {
         } else {
             await interaction.editReply("Could not find the storage monitor to update.");
         }
+        return true;
     }
   } else if (interaction.isStringSelectMenu()) {
     if (interaction.customId === 'watchlist-remove-menu') {
@@ -644,7 +648,7 @@ export async function handleInteraction(interaction: Interaction) {
         } else {
             await interaction.editReply(`Could not find ${selectedValue} in watchlist.`);
         }
-        return;
+        return true;
     }
 
     if (interaction.customId.startsWith('switch-auto-')) {
@@ -700,6 +704,8 @@ export async function handleInteraction(interaction: Interaction) {
         } else {
                 await interaction.followUp({ content: "Switch not found.", flags: [64] });
         }
+        return true;
     }
   }
+  return false;
 }

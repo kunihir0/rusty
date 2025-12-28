@@ -33,7 +33,7 @@ export const bot = new Client({
   },
 });
 
-bot.once("ready", async () => {
+bot.once("clientReady", async () => {
   await bot.guilds.fetch();
   void bot.initApplicationCommands();
   console.log("Bot started");
@@ -103,10 +103,12 @@ bot.once("ready", async () => {
 
 bot.on("interactionCreate", async (interaction: Interaction) => {
   // Handle custom interactions (Buttons, Modals, etc.)
-  await handleInteraction(interaction);
+  const handled = await handleInteraction(interaction);
   
-  // Let discordx handle Slash Commands and Simple Commands
-  bot.executeInteraction(interaction);
+  // Let discordx handle Slash Commands and Simple Commands if not handled
+  if (!handled) {
+      await bot.executeInteraction(interaction);
+  }
 });
 
 bot.on("messageCreate", (message: Message) => {

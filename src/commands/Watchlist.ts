@@ -1,6 +1,6 @@
 import { ApplicationCommandOptionType, CommandInteraction, EmbedBuilder } from "discord.js";
 import { Discord, Slash, SlashGroup, SlashOption } from "discordx";
-import { addToWatchList, removeFromWatchList, getWatchList, refreshDashboard } from "../discord/services/BattlemetricsManager";
+import { addToWatchList, removeFromWatchList, getWatchList, refreshDashboard, clearWatchList } from "../discord/services/BattlemetricsManager";
 
 @Discord()
 @SlashGroup({ name: "watchlist", description: "Manage MSS Watchlist" })
@@ -39,6 +39,13 @@ export class WatchlistCommands {
         } else {
             await interaction.reply({ content: `❌ Player **${nameOrId}** not found in watchlist.`, ephemeral: true });
         }
+    }
+
+    @Slash({ name: "clear", description: "Clear the entire watchlist" })
+    async clear(interaction: CommandInteraction): Promise<void> {
+        await interaction.deferReply({ ephemeral: true });
+        clearWatchList();
+        await interaction.editReply({ content: "🗑️ Watchlist has been cleared." });
     }
 
     @Slash({ name: "refresh", description: "Force refresh and rebuild the Watchlist Dashboard" })

@@ -79,4 +79,35 @@ export class Credentials {
         flags: [64] // Ephemeral flag
     });
   }
+
+  @Slash({ name: "clear_servers", description: "Clear all paired servers" })
+  async clearServers(interaction: CommandInteraction): Promise<void> {
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const credentialsPath = path.join(process.cwd(), 'fcm-state.json');
+        const persistence = new JsonPersistenceManager(credentialsPath);
+        
+        // Load current state to preserve other potential keys if any, 
+        // but we specifically want to wipe server lists.
+        const state = persistence.loadState();
+        
+        const count = Object.keys(state.serverList || {}).length;
+        
+        state.serverList = {};
+        state.serverListLite = {};
+        
+        persistence.saveState(state);
+        
+        // Note: This does not disconnect active RustPlus instances in memory immediately
+        // unless we access appState, but persistence is cleared.
+        
+        await interaction.editReply({ 
+            content: `✅ Cleared ${count} paired servers from persistent state.` 
+        });
+    } catch (e: any) {
+        console.error("Error clearing servers:", e);
+        await interaction.editReply({ content: `❌ Error clearing servers: ${e.message}` });
+    }
+  }
 }

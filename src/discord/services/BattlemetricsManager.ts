@@ -139,6 +139,13 @@ export function removeFromWatchList(nameOrId: string): boolean {
     return false;
 }
 
+export function clearWatchList(): void {
+    watchedPlayers.clear();
+    saveWatchlist();
+    updateWatchlistDashboard();
+    console.log(`[Watchlist] Cleared entire watchlist.`);
+}
+
 export function getWatchList(): Map<string, WatchEntry> {
     return watchedPlayers;
 }

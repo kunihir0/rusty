@@ -204,4 +204,29 @@ export async function handleFcmEvent(type: string, data: any) {
             await thread.send({ embeds: [monitorEmbed], components: [row] });
         }
     }
+    else if (type === 'ALARM_TRIGGER') {
+        if (!appState.fcmHandler) return;
+        
+        const server = appState.fcmHandler.state.serverList[data.serverId];
+        if (!server) return;
+
+        const alarm = server.alarms[data.entityId];
+        const threads = await getTargetThreads(data.serverId, "Alarms");
+
+        for (const thread of threads) {
+            const alarmName = alarm ? alarm.name : 'Smart Alarm';
+            const embed = new EmbedBuilder()
+                .setTitle(`🚨 ${alarmName} Triggered!`)
+                .setColor(Colors.Red)
+                .setDescription(data.message)
+                .setTimestamp();
+
+            let content = "";
+            if (alarm && alarm.everyone) {
+                content = "@everyone";
+            }
+
+            await thread.send({ content: content || undefined, embeds: [embed] });
+        }
+    }
 }
