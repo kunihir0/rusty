@@ -9,6 +9,7 @@ import { handleInteraction } from "./discord/interactions/InteractionHandler";
 import { handleFcmEvent } from "./discord/services/fcmIntegration";
 import { startBattlemetricsPolling } from "./discord/services/BattlemetricsManager";
 import { onDiscordMessage } from "./discord/services/TeamChatBridge";
+import { connectToRustServer } from "./discord/services/RustPlusManager";
 
 export const bot = new Client({
   // To use only guild command
@@ -96,6 +97,20 @@ bot.once("clientReady", async () => {
     
     // Start Battlemetrics Polling
     startBattlemetricsPolling();
+
+    // Auto-connect to first saved server if not connected via Env Vars
+    if (!appState.rustPlus) {
+        const servers = Object.keys(appState.fcmHandler.state.serverList);
+        if (servers.length > 0) {
+            const lastServer = servers[servers.length - 1]; // Pick last added or arbitrary
+            console.log(`[Auto-Connect] Connecting to saved server: ${appState.fcmHandler.state.serverList[lastServer].title}`);
+            try {
+                connectToRustServer(lastServer);
+            } catch (e) {
+                console.error("[Auto-Connect] Failed:", e);
+            }
+        }
+    }
   } else {
     console.warn("FCM config missing. Skipping FCM Handler.");
   }

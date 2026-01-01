@@ -147,12 +147,21 @@ export async function handleFcmEvent(type: string, data: any) {
                     { name: 'Last Trigger', value: 'Never', inline: false },
                     { name: 'Message', value: alarmData.message, inline: false }
                 );
+            
+            // List opted-in DM users
+            if (alarmData.dmUsers && alarmData.dmUsers.length > 0) {
+                 const userMentions = alarmData.dmUsers.map((uid: string) => `<@${uid}>`).join(', ');
+                 alarmEmbed.addFields({ name: 'DM Opt-in', value: userMentions, inline: false });
+            } else {
+                 alarmEmbed.addFields({ name: 'DM Opt-in', value: 'None', inline: false });
+            }
 
             const row = new ActionRowBuilder<ButtonBuilder>()
                 .addComponents(
                     new ButtonBuilder().setCustomId(`alarm-everyone-${data.entityId}`).setLabel("@everyone").setStyle(alarmData.everyone ? ButtonStyle.Success : ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`alarm-edit-${data.entityId}`).setLabel("Edit").setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(`alarm-remove-${data.entityId}`).setLabel("🗑️").setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId(`alarm-dm-${data.entityId}`).setLabel("Toggle DM").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`alarm-edit-${data.entityId}`).setLabel("Edit").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`alarm-remove-${data.entityId}`).setLabel("🗑️").setStyle(ButtonStyle.Danger)
                 );
 
             await thread.send({ embeds: [alarmEmbed], components: [row] });
@@ -227,6 +236,38 @@ export async function handleFcmEvent(type: string, data: any) {
             }
 
             await thread.send({ content: content || undefined, embeds: [embed] });
+        }
+
+        // Send DMs to opted-in users
+        if (alarm && alarm.dmUsers && alarm.dmUsers.length > 0) {
+             const dmEmbed = new EmbedBuilder()
+                .setTitle(`🚨 Alarm Triggered: ${alarm.name}`)
+                .setColor(Colors.Red)
+                .setDescription(data.message)
+                .addFields({ name: 'Server', value: server.title })
+                .setTimestamp();
+             
+             // We need to resolve users from the Discord client.
+             // Since we don't have direct access to 'bot' here, we can rely on thread.guild.members.fetch() or similar if available,
+             // or loop through pairing channels again to find member objects.
+             
+             // Iterating pairingChannels to find a guild to fetch users from
+             const guildId = appState.pairingChannels.keys().next().value;
+             if (guildId) {
+                 const channel = appState.pairingChannels.get(guildId);
+                 if (channel) {
+                     for (const userId of alarm.dmUsers) {
+                         try {
+                             const member = await channel.guild.members.fetch(userId);
+                             if (member) {
+                                 await member.send({ embeds: [dmEmbed] }).catch(e => console.error(`Failed to DM ${userId}:`, e));
+                             }
+                         } catch (e) {
+                             console.error(`Failed to fetch/DM user ${userId}:`, e);
+                         }
+                     }
+                 }
+             }
         }
     } else if (type === 'PLAYER_DEATH') {
         // data: { title, message, body, targetImage }

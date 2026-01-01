@@ -89,9 +89,11 @@ export async function connectToRustServer(serverId: string) {
     rustPlus.on('message', async (msg: AppMessage) => {
         // Debug Log
         if (msg.broadcast) {
-             console.log("[RustPlus] Received Broadcast:", JSON.stringify(msg.broadcast, (key, value) => 
-                key === 'jpgImage' ? '[Buffer]' : value
-             ));
+             console.log("[RustPlus] Received Broadcast:", JSON.stringify(msg.broadcast, (key, value) => {
+                if (key === 'jpgImage') return '[Buffer]';
+                if (typeof value === 'bigint') return value.toString();
+                return value;
+             }));
         }
 
         try {
@@ -111,6 +113,10 @@ export async function connectToRustServer(serverId: string) {
     
     // Sync with legacy appState for compatibility
     appState.rustPlus = rustPlus;
+    
+    if (appState.fcmHandler) {
+        appState.fcmHandler.updateRustPlus(rustPlus);
+    }
     
     return rustPlus;
 }

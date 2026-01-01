@@ -96,9 +96,14 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
       } else { // remove-
         await interaction.deferReply({ ephemeral: true });
         try {
+            if (!appState.fcmHandler) {
+                await interaction.editReply("FCM Handler is not active.");
+                return true;
+            }
+
             const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
             const persistence = new JsonPersistenceManager(fcmStatePath);
-            const state = persistence.loadState();
+            const state = appState.fcmHandler.state;
 
             if (state.serverList && state.serverList[serverId]) {
                 if (appState.rustPlus && appState.rustPlus['server'] === serverId.split('-')[0] && appState.rustPlus['port'].toString() === serverId.split('-')[1]) {
@@ -119,7 +124,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
 
                 await interaction.editReply(`Server ${serverId} has been removed.`);
             } else {
-                await interaction.editReply(`Server ${serverId} not found in state file.`);
+                await interaction.editReply(`Server ${serverId} not found in state.`);
             }
         } catch (e: any) {
             console.error("Error removing server:", e);
@@ -193,6 +198,12 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                 } else {
                     switchState.active = newState;
                     
+                    if (appState.fcmHandler) {
+                        const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                        const persistence = new JsonPersistenceManager(fcmStatePath);
+                        persistence.saveState(appState.fcmHandler.state);
+                    }
+                    
                     const updatedEmbed = new EmbedBuilder(interaction.message.embeds[0].data)
                         .setColor(newState ? Colors.Green : Colors.Red)
                         .setFields(
@@ -234,9 +245,13 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         } else if (action === 'remove') {
             await interaction.deferReply({ ephemeral: true });
             try {
+                if (!appState.fcmHandler) {
+                     await interaction.editReply("FCM Handler inactive.");
+                     return true;
+                }
                 const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
                 const persistence = new JsonPersistenceManager(fcmStatePath);
-                const state = persistence.loadState();
+                const state = appState.fcmHandler.state;
                 
                 let found = false;
                 for (const sId in state.serverList) {
@@ -268,9 +283,10 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         if (action === 'everyone') {
             await interaction.deferUpdate();
             
+            if (!appState.fcmHandler) return true;
             const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
             const persistence = new JsonPersistenceManager(fcmStatePath);
-            const state = persistence.loadState();
+            const state = appState.fcmHandler.state;
             
             let serverId;
             let alarm;
@@ -303,6 +319,57 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                 await interaction.followUp({ content: "Could not find the alarm state to update.", flags: [64] });
             }
 
+        } else if (action === 'dm') {
+            await interaction.deferUpdate();
+            
+            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+            const persistence = new JsonPersistenceManager(fcmStatePath);
+            const state = persistence.loadState();
+            
+            let alarm;
+            for (const sId in state.serverList) {
+                if (state.serverList[sId].alarms && state.serverList[sId].alarms[entityId]) {
+                    alarm = state.serverList[sId].alarms[entityId];
+                    break;
+                }
+            }
+
+            if (alarm) {
+                if (!alarm.dmUsers) alarm.dmUsers = [];
+                
+                const userId = interaction.user.id;
+                if (alarm.dmUsers.includes(userId)) {
+                    alarm.dmUsers = alarm.dmUsers.filter((id: string) => id !== userId);
+                } else {
+                    alarm.dmUsers.push(userId);
+                }
+                
+                persistence.saveState(state);
+
+                // Update Embed
+                const currentEmbed = interaction.message.embeds[0];
+                const newEmbed = new EmbedBuilder(currentEmbed.data);
+                
+                let userMentions = 'None';
+                if (alarm.dmUsers.length > 0) {
+                     userMentions = alarm.dmUsers.map((uid: string) => `<@${uid}>`).join(', ');
+                }
+                
+                // Find "DM Opt-in" field or add it (it should exist from PAIRING_ALARM update)
+                const fields = newEmbed.data.fields || [];
+                const dmFieldIdx = fields.findIndex(f => f.name === 'DM Opt-in');
+                
+                if (dmFieldIdx !== -1) {
+                    fields[dmFieldIdx].value = userMentions;
+                } else {
+                    newEmbed.addFields({ name: 'DM Opt-in', value: userMentions, inline: false });
+                }
+                
+                await interaction.editReply({ embeds: [newEmbed] });
+            } else {
+                 await interaction.followUp({ content: "Could not find alarm data.", flags: [64] });
+            }
+
         } else if (action === 'edit') {
             const modal = new ModalBuilder()
                 .setTitle("Edit Smart Alarm")
@@ -329,9 +396,13 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         } else if (action === 'remove') {
             await interaction.deferReply({ ephemeral: true });
             try {
+                if (!appState.fcmHandler) {
+                     await interaction.editReply("FCM Handler inactive.");
+                     return true;
+                }
                 const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
                 const persistence = new JsonPersistenceManager(fcmStatePath);
-                const state = persistence.loadState();
+                const state = appState.fcmHandler.state;
                 
                 let found = false;
                 for (const sId in state.serverList) {
@@ -363,9 +434,10 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         if (action === 'ingame' || action === 'everyone') {
             await interaction.deferUpdate();
             
+            if (!appState.fcmHandler) return true;
             const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
             const persistence = new JsonPersistenceManager(fcmStatePath);
-            const state = persistence.loadState();
+            const state = appState.fcmHandler.state;
             
             let serverId;
             let monitor;
@@ -465,9 +537,13 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         } else if (action === 'remove') {
             await interaction.deferReply({ ephemeral: true });
             try {
+                if (!appState.fcmHandler) {
+                     await interaction.editReply("FCM Handler inactive.");
+                     return true;
+                }
                 const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
                 const persistence = new JsonPersistenceManager(fcmStatePath);
-                const state = persistence.loadState();
+                const state = appState.fcmHandler.state;
                 
                 let found = false;
                 for (const sId in state.serverList) {
@@ -500,9 +576,13 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         
         await interaction.deferReply({ ephemeral: true });
 
+        if (!appState.fcmHandler) {
+            await interaction.editReply("FCM Handler inactive.");
+            return true;
+        }
         const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
-        const state = persistence.loadState();
+        const state = appState.fcmHandler.state;
         
         let serverId;
         let switchData;
@@ -546,9 +626,13 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
 
         await interaction.deferReply({ ephemeral: true });
 
+        if (!appState.fcmHandler) {
+             await interaction.editReply("FCM Handler inactive.");
+             return true;
+        }
         const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
-        const state = persistence.loadState();
+        const state = appState.fcmHandler.state;
 
         let serverId;
         let alarmData;
@@ -598,9 +682,13 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
 
         await interaction.deferReply({ ephemeral: true });
 
+        if (!appState.fcmHandler) {
+             await interaction.editReply("FCM Handler inactive.");
+             return true;
+        }
         const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
-        const state = persistence.loadState();
+        const state = appState.fcmHandler.state;
 
         let serverId;
         let monitorData;
@@ -657,9 +745,13 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
 
         await interaction.deferUpdate();
 
+        if (!appState.fcmHandler) {
+             await interaction.followUp({ content: "FCM Handler inactive.", flags: [64] });
+             return true;
+        }
         const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
-        const state = persistence.loadState();
+        const state = appState.fcmHandler.state;
 
         let serverId;
         let switchData;

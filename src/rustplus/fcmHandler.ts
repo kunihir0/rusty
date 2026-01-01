@@ -26,7 +26,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
     const securityToken = config.securityToken;
     const steamId = config.steamId;
     const persistenceManager = config.persistenceManager;
-    const rustplus: RustPlus | null = config.rustplus || null;
+    let rustplus: RustPlus | null = config.rustplus || null;
     const onEvent = config.onEvent || (() => {});
     const log = config.log || console.log;
 
@@ -54,6 +54,10 @@ export function createFcmHandler(config: FcmHandlerConfig) {
             client.destroy();
             client = null;
         }
+    }
+
+    function updateRustPlus(rp: RustPlus) {
+        rustplus = rp;
     }
 
     function _onDataReceived(data: any) {
@@ -330,6 +334,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
             active: entityExist ? alarms[body.entityId].active : false,
             reachable: entityExist ? alarms[body.entityId].reachable : true,
             everyone: entityExist ? alarms[body.entityId].everyone : false,
+            dmUsers: entityExist ? alarms[body.entityId].dmUsers : [],
             name: entityExist ? alarms[body.entityId].name : 'Smart Alarm',
             message: entityExist ? alarms[body.entityId].message : 'Base is under attack!',
             lastTrigger: entityExist ? alarms[body.entityId].lastTrigger : null,
@@ -531,6 +536,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
     return {
         start,
         destroy,
-        state
+        state,
+        updateRustPlus
     };
 }

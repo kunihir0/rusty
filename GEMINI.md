@@ -80,3 +80,11 @@ for (const user of users) {
   if (user.isActive) ids.push(user.id); // Mutation
 }
 ```
+
+# Comments policy
+Only write high-value comments if at all. Avoid talking to the user through comments.
+
+# General requirements
+- If there is something you do not understand or is ambiguous, seek confirmation or clarification from the user before making changes based on assumptions.
+- Use hyphens instead of underscores in flag names (e.g. my-flag instead of my_flag).
+- Always refer to Gemini CLI as Gemini CLI, never the Gemini CLI.
