@@ -7,6 +7,9 @@ export interface BotConfig {
     enableShopCommand: boolean;
     enableTeamChatLogging: boolean;
     enableDeathNotifications: boolean;
+    enableWatchlistCommands: boolean;
+    enableJoinLeaveNotifications: boolean;
+    configAdminRoleId: string | null;
 }
 
 const DEFAULT_CONFIG: BotConfig = {
@@ -14,7 +17,10 @@ const DEFAULT_CONFIG: BotConfig = {
     replyCooldownSeconds: 10,
     enableShopCommand: true,
     enableTeamChatLogging: true,
-    enableDeathNotifications: true
+    enableDeathNotifications: true,
+    enableWatchlistCommands: true,
+    enableJoinLeaveNotifications: true,
+    configAdminRoleId: null
 };
 
 const CONFIG_PATH = path.join(process.cwd(), 'bot-config.json');

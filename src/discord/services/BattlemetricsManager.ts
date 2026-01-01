@@ -4,6 +4,7 @@ import { EmbedBuilder, Colors, TextChannel, Message, ActionRowBuilder, ButtonBui
 import { TeamDetectorService } from "./TeamDetectorService";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
 import { SteamService } from "../../rustplus/services/SteamService";
+import { getRustPlus } from "./RustPlusManager";
 import path from "path";
 
 const clients = new Map<string, BattlemetricsClient>();
@@ -171,6 +172,36 @@ export function clearWatchList(): void {
 
 export function getWatchList(): Map<string, WatchEntry> {
     return watchedPlayers;
+}
+
+export function getWatchListStatus(): string {
+    const online: string[] = [];
+    const offline: string[] = [];
+
+    // We check all clients to see who is online
+    // A player is online if they are in ANY tracked server's onlinePlayers list
+    
+    for (const [steamId, entry] of watchedPlayers) {
+        let isOnline = false;
+        for (const client of clients.values()) {
+            if (client.onlinePlayers.includes(steamId)) {
+                isOnline = true;
+                break;
+            }
+            // Fallback: Check by name if ID match fails (though ID match is better)
+            // client.onlinePlayers is IDs. client.players[id].name is name.
+        }
+
+        if (isOnline) online.push(entry.name);
+        else offline.push(entry.name);
+    }
+
+    if (watchedPlayers.size === 0) return "Watchlist empty.";
+
+    const onlineStr = online.length > 0 ? `Online (${online.length}): ${online.join(', ')}` : "Online: 0";
+    const offlineStr = `Offline: ${offline.length}`;
+    
+    return `[MSS Watchlist] ${onlineStr} | ${offlineStr}`;
 }
 
 export async function refreshDashboard() {
@@ -391,6 +422,31 @@ async function runLoop() {
                 if (success) {
                     if (client.loginPlayers.length > 0 || client.logoutPlayers.length > 0) {
                         needsDashboardUpdate = true;
+                    }
+                }
+            }
+
+            // --- Feature: Join/Leave Notifications (In-Game) ---
+            const rustPlus = getRustPlus();
+            if (rustPlus && rustPlus.isConnected()) {
+                // Check Logins
+                for (const playerId of client.loginPlayers) {
+                    const player = client.players[playerId];
+                    // Check ID or Name
+                    if (watchedPlayers.has(playerId) || Array.from(watchedPlayers.values()).some(e => e.name === player.name)) {
+                        const name = player.name;
+                        console.log(`[Watchlist] Player JOINED: ${name} (${playerId})`);
+                        rustPlus.sendTeamMessage(`[MSS] 🟢 WATCHED PLAYER JOINED: ${name}`);
+                    }
+                }
+                
+                // Check Logouts
+                for (const playerId of client.logoutPlayers) {
+                    const player = client.players[playerId];
+                    if (watchedPlayers.has(playerId) || Array.from(watchedPlayers.values()).some(e => e.name === player.name)) {
+                        const name = player.name;
+                        console.log(`[Watchlist] Player LEFT: ${name} (${playerId})`);
+                        rustPlus.sendTeamMessage(`[MSS] 🔴 WATCHED PLAYER LEFT: ${name}`);
                     }
                 }
             }

@@ -3,6 +3,7 @@ import { appState } from "../../state/AppState";
 import { AppMessage } from "../../gen/rustplus_pb";
 import { getRustPlus, getCurrentServerId } from "./RustPlusManager";
 import { configManager } from "../../config/BotConfig";
+import { addToWatchList, getWatchListStatus } from "./BattlemetricsManager";
 
 let lastReplyTime = 0;
 const pendingThreadCreations = new Map<string, Promise<ThreadChannel | null>>();
@@ -46,6 +47,26 @@ export async function onRustMessage(message: AppMessage, serverId: string) {
         const prefix = config.ingamePrefix;
         const cooldownMs = config.replyCooldownSeconds * 1000;
 
+        // MSS Watchlist Commands
+        if (content) {
+            if (content.startsWith(`${prefix}mss add `)) {
+                const steamId = content.substring(prefix.length + 8).trim(); // prefix + "mss add "
+                const result = await addToWatchList(steamId);
+                const rustPlus = getRustPlus();
+                if (rustPlus) {
+                    rustPlus.sendTeamMessage(`[MSS] ${result.message}`);
+                }
+            }
+            
+            if (content === `${prefix}mss status`) {
+                const status = getWatchListStatus();
+                const rustPlus = getRustPlus();
+                if (rustPlus) {
+                    rustPlus.sendTeamMessage(status);
+                }
+            }
+        }
+
         if (config.enableShopCommand && content && content.startsWith(`${prefix}shop `)) {
             const now = Date.now();
             if (now - lastReplyTime >= cooldownMs) {
@@ -63,29 +84,30 @@ export async function onRustMessage(message: AppMessage, serverId: string) {
                             if (searchResult.results.length === 0) {
                                  rustPlus.sendTeamMessage(`Shop: No selling offers found for ${searchResult.queryItem}`);
                             } else {
-                                                            // Sort by cost (cheapest first)
-                                                            const sorted = searchResult.results.sort((a, b) => a.cost - b.cost);
-                                                            const top = sorted.slice(0, 3);
-                                                            
-                                                            let currentMsg = "";
-                                                            const MAX_LEN = 128;
+                                // Sort by cost (cheapest first)
+                                const sorted = searchResult.results.sort((a, b) => a.cost - b.cost);
+                                const top = sorted.slice(0, 3);
                                 
-                                                            for (const offer of top) {
-                                                                // Compact format: [G15] 100x -> 20 Scrap
-                                                                const line = `[${offer.grid}] ${offer.quantity}x -> ${offer.cost} ${offer.currencyName}`;
-                                                                
-                                                                // Check if adding this line would exceed limit (plus separator)
-                                                                if (currentMsg.length > 0 && (currentMsg.length + line.length + 2) > MAX_LEN) {
-                                                                    rustPlus.sendTeamMessage(currentMsg);
-                                                                    currentMsg = line;
-                                                                } else {
-                                                                    if (currentMsg.length > 0) currentMsg += " | ";
-                                                                    currentMsg += line;
-                                                                }
-                                                            }
-                                                            if (currentMsg.length > 0) {
-                                                                rustPlus.sendTeamMessage(currentMsg);
-                                                            }                            }
+                                let currentMsg = "";
+                                const MAX_LEN = 128;
+    
+                                for (const offer of top) {
+                                    // Compact format: [G15] 100x -> 20 Scrap
+                                    const line = `[${offer.grid}] ${offer.quantity}x -> ${offer.cost} ${offer.currencyName}`;
+                                    
+                                    // Check if adding this line would exceed limit (plus separator)
+                                    if (currentMsg.length > 0 && (currentMsg.length + line.length + 2) > MAX_LEN) {
+                                        rustPlus.sendTeamMessage(currentMsg);
+                                        currentMsg = line;
+                                    } else {
+                                        if (currentMsg.length > 0) currentMsg += " | ";
+                                        currentMsg += line;
+                                    }
+                                }
+                                if (currentMsg.length > 0) {
+                                    rustPlus.sendTeamMessage(currentMsg);
+                                }
+                            }
                         }
                     }
                 }
@@ -115,18 +137,18 @@ export async function onRustMessage(message: AppMessage, serverId: string) {
 
             // Create lock promise
             const promise = (async () => {
-                let thread = channel.threads.cache.find(t => t.name === threadName);
+                let thread = channel.threads.cache.find(t => t.name === threadName) as ThreadChannel;
                 if (!thread) {
                     try {
                         const fetched = await channel.threads.fetch();
-                        thread = fetched.threads.find(t => t.name === threadName);
+                        thread = fetched.threads.find(t => t.name === threadName) as ThreadChannel;
                         
                         if (!thread) {
                              thread = await channel.threads.create({
                                  name: threadName,
                                  autoArchiveDuration: 10080,
                                  reason: 'Team Chat Bridge'
-                             });
+                             }) as ThreadChannel;
                         }
                     } catch (e) {
                         console.error("Error managing Team Chat thread:", e);
