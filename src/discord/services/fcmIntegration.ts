@@ -2,6 +2,8 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, EmbedBuilder, Str
 import path from "path";
 import { appState } from "../../state/AppState";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
+import { connectToRustServer, getCurrentServerId } from "./RustPlusManager";
+import { configManager } from "../../config/BotConfig";
 
 async function getTargetThreads(serverId: string, suffix: string): Promise<ThreadChannel[]> {
     const server = appState.fcmHandler?.state.serverList[serverId];
@@ -35,7 +37,23 @@ async function getTargetThreads(serverId: string, suffix: string): Promise<Threa
 
 export async function handleFcmEvent(type: string, data: any) {
     if (type === 'PAIRING_SERVER') {
+        if (data.isNew === false) {
+            console.log(`[FCM] Server update received for ${data.data.title} (${data.serverId}). Suppressing duplicate embed.`);
+            return;
+        }
+
         console.log('FCM Handler State after pairing event:', appState.fcmHandler?.state);
+        
+        // Auto-connect to the new server
+        let autoConnected = false;
+        try {
+            console.log(`[Auto-Connect] New server paired: ${data.data.title}. Connecting...`);
+            await connectToRustServer(data.serverId);
+            autoConnected = true;
+        } catch (e) {
+            console.error(`[Auto-Connect] Failed to connect to new server ${data.serverId}:`, e);
+        }
+
         for (const channel of appState.pairingChannels.values()) {
         try {
             // Create a new thread for the server
@@ -72,9 +90,15 @@ export async function handleFcmEvent(type: string, data: any) {
             )
             .setFooter({ text: "收到新的服务器配对" });
 
+            // Check connection status for button
+            const isConnected = autoConnected || (appState.rustPlus && getCurrentServerId() === data.serverId);
+
             const row = new ActionRowBuilder<ButtonBuilder>()
             .addComponents(
-                new ButtonBuilder().setCustomId(`pair-${data.serverId}`).setLabel("Pair").setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(isConnected ? `disconnect-${data.serverId}` : `pair-${data.serverId}`)
+                    .setLabel(isConnected ? "Disconnect" : "Pair")
+                    .setStyle(isConnected ? ButtonStyle.Danger : ButtonStyle.Success),
                 new ButtonBuilder().setCustomId(`remove-${data.serverId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setURL(data.data.url).setLabel("Website").setStyle(ButtonStyle.Link),
                 new ButtonBuilder().setURL(`https://www.battlemetrics.com/servers/rust/${data.data.battlemetricsId}`).setLabel("BattleMetrics").setStyle(ButtonStyle.Link)
@@ -270,6 +294,9 @@ export async function handleFcmEvent(type: string, data: any) {
              }
         }
     } else if (type === 'PLAYER_DEATH') {
+        // Check config before processing
+        if (!configManager.getConfig().enableDeathNotifications) return;
+
         // data: { title, message, body, targetImage }
         // Find 'Team Chat' thread
         // We don't have serverId directly in the event data from fcmHandler for PLAYER_DEATH usually?

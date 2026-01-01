@@ -1,6 +1,7 @@
-import { ApplicationCommandOptionType, type CommandInteraction } from "discord.js";
+import { ApplicationCommandOptionType, type CommandInteraction, MessageFlags } from "discord.js";
 import { Discord, Slash, SlashGroup, SlashOption } from "discordx";
 import { JsonPersistenceManager } from "../rustplus/PersistenceManager";
+import { appState } from "../state/AppState";
 import path from "path";
 
 @Discord()
@@ -76,34 +77,84 @@ export class Credentials {
 
     await interaction.reply({
         content: `Credentials added and saved for Steam ID: ${steamId}`,
-        flags: [64] // Ephemeral flag
+        flags: MessageFlags.Ephemeral
     });
   }
 
-  @Slash({ name: "clear_servers", description: "Clear all paired servers" })
+  @Slash({ name: "clear_servers", description: "Clear all paired servers and threads" })
   async clearServers(interaction: CommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
+        // 1. Disconnect Active Client
+        if (appState.rustPlus) {
+            appState.rustPlus.disconnect();
+            appState.rustPlus = undefined;
+        }
+
+        // 2. Clear Persistence
         const credentialsPath = path.join(process.cwd(), 'fcm-state.json');
         const persistence = new JsonPersistenceManager(credentialsPath);
         
-        // Load current state to preserve other potential keys if any, 
-        // but we specifically want to wipe server lists.
         const state = persistence.loadState();
-        
-        const count = Object.keys(state.serverList || {}).length;
+        const serverCount = Object.keys(state.serverList || {}).length;
         
         state.serverList = {};
         state.serverListLite = {};
         
+        // Also update in-memory state if fcmHandler is active
+        if (appState.fcmHandler) {
+            appState.fcmHandler.state.serverList = {};
+            appState.fcmHandler.state.serverListLite = {};
+        }
+
         persistence.saveState(state);
-        
-        // Note: This does not disconnect active RustPlus instances in memory immediately
-        // unless we access appState, but persistence is cleared.
+
+        // 3. Delete Threads
+        let deletedThreads = 0;
+        for (const channel of appState.pairingChannels.values()) {
+            try {
+                // Fetch active threads
+                const active = await channel.threads.fetchActive();
+                for (const thread of active.threads.values()) {
+                    await thread.delete("Clear Servers Command");
+                    deletedThreads++;
+                }
+
+                // Fetch archived threads
+                const archived = await channel.threads.fetchArchived();
+                for (const thread of archived.threads.values()) {
+                    await thread.delete("Clear Servers Command");
+                    deletedThreads++;
+                }
+                
+                // 4. Clear Messages in Parent Channel (System messages like "Thread started")
+                let fetched;
+                do {
+                    fetched = await channel.messages.fetch({ limit: 100 });
+                    if (fetched.size > 0) {
+                        // filterOld: true ensures we don't error on >14 day old messages
+                        // For older messages that aren't deleted by bulkDelete, we manually delete them
+                        const deleted = await channel.bulkDelete(fetched, true);
+                        
+                        if (deleted.size < fetched.size) {
+                            // Some messages were too old for bulk delete, delete them manually
+                            for (const msg of fetched.values()) {
+                                if (!deleted.has(msg.id)) {
+                                    await msg.delete().catch(() => {});
+                                }
+                            }
+                        }
+                    }
+                } while (fetched.size >= 100); // Continue if we fetched a full batch
+
+            } catch (err) {
+                console.error(`Failed to cleanup channel ${channel.id}:`, err);
+            }
+        }
         
         await interaction.editReply({ 
-            content: `✅ Cleared ${count} paired servers from persistent state.` 
+            content: `✅ Cleared ${serverCount} paired servers, deleted ${deletedThreads} threads, and cleaned channel messages.` 
         });
     } catch (e: any) {
         console.error("Error clearing servers:", e);

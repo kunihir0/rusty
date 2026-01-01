@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, CommandInteraction, EmbedBuilder } from "discord.js";
+import { ApplicationCommandOptionType, CommandInteraction, EmbedBuilder, MessageFlags } from "discord.js";
 import { Discord, Slash, SlashGroup, SlashOption } from "discordx";
 import { addToWatchList, removeFromWatchList, getWatchList, refreshDashboard, clearWatchList } from "../discord/services/BattlemetricsManager";
 
@@ -17,7 +17,7 @@ export class WatchlistCommands {
         steamId: string,
         interaction: CommandInteraction
     ): Promise<void> {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const result = await addToWatchList(steamId);
         await interaction.editReply({ content: result.message });
     }
@@ -35,22 +35,22 @@ export class WatchlistCommands {
     ): Promise<void> {
         const removed = removeFromWatchList(nameOrId);
         if (removed) {
-            await interaction.reply({ content: `🗑️ Removed **${nameOrId}** from the watchlist.`, ephemeral: true });
+            await interaction.reply({ content: `🗑️ Removed **${nameOrId}** from the watchlist.`, flags: MessageFlags.Ephemeral });
         } else {
-            await interaction.reply({ content: `❌ Player **${nameOrId}** not found in watchlist.`, ephemeral: true });
+            await interaction.reply({ content: `❌ Player **${nameOrId}** not found in watchlist.`, flags: MessageFlags.Ephemeral });
         }
     }
 
     @Slash({ name: "clear", description: "Clear the entire watchlist" })
     async clear(interaction: CommandInteraction): Promise<void> {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         clearWatchList();
         await interaction.editReply({ content: "🗑️ Watchlist has been cleared." });
     }
 
     @Slash({ name: "refresh", description: "Force refresh and rebuild the Watchlist Dashboard" })
     async refresh(interaction: CommandInteraction): Promise<void> {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await refreshDashboard();
         await interaction.editReply({ content: "✅ Dashboard has been refreshed." });
     }
@@ -59,7 +59,7 @@ export class WatchlistCommands {
     async list(interaction: CommandInteraction): Promise<void> {
         const list = getWatchList();
         if (list.size === 0) {
-            await interaction.reply({ content: "The watchlist is empty.", ephemeral: true });
+            await interaction.reply({ content: "The watchlist is empty.", flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -74,6 +74,6 @@ export class WatchlistCommands {
         }
 
         embed.setDescription(description.substring(0, 4096));
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 }

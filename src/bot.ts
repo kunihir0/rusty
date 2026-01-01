@@ -11,6 +11,8 @@ import { startBattlemetricsPolling } from "./discord/services/BattlemetricsManag
 import { onDiscordMessage } from "./discord/services/TeamChatBridge";
 import { connectToRustServer } from "./discord/services/RustPlusManager";
 
+import { ConfigurationService } from "./discord/services/ConfigurationService";
+
 export const bot = new Client({
   // To use only guild command
   // botGuilds: [(client) => client.guilds.cache.map((guild) => guild.id)],
@@ -38,6 +40,10 @@ bot.once("clientReady", async () => {
   await bot.guilds.fetch();
   void bot.initApplicationCommands();
   console.log("Bot started");
+
+  // Initialize Configuration Service
+  appState.configService = new ConfigurationService(bot);
+  await appState.configService.init();
 
   // Setup pairing channels
   for (const guild of bot.guilds.cache.values()) {

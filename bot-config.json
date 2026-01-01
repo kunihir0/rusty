@@ -1,0 +1,7 @@
+{
+  "ingamePrefix": "@",
+  "replyCooldownSeconds": 10,
+  "enableShopCommand": true,
+  "enableTeamChatLogging": true,
+  "enableDeathNotifications": true
+}

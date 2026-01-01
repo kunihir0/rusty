@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, CommandInteraction, EmbedBuilder, Colors } from "discord.js";
+import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, CommandInteraction, EmbedBuilder, Colors, MessageFlags } from "discord.js";
 import { Discord, Slash, SlashChoice, SlashGroup, SlashOption } from "discordx";
 import { appState } from "../state/AppState";
 import { JsonPersistenceManager } from "../rustplus/PersistenceManager";
@@ -16,7 +16,7 @@ export class DeviceCommands {
     @Slash({ name: "list", description: "List all paired devices" })
     async list(interaction: CommandInteraction): Promise<void> {
         if (!appState.fcmHandler) {
-            await interaction.reply({ content: "FCM Handler not active.", ephemeral: true });
+            await interaction.reply({ content: "FCM Handler not active.", flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -52,7 +52,7 @@ export class DeviceCommands {
             embed.setDescription("No devices found.");
         }
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     @Slash({ name: "remove", description: "Remove a specific device by ID" })
@@ -78,7 +78,7 @@ export class DeviceCommands {
 
         interaction: CommandInteraction
     ): Promise<void> {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         if (!appState.fcmHandler) {
             await interaction.editReply("FCM Handler not active.");
@@ -138,7 +138,7 @@ ${entityId}
 
         interaction: CommandInteraction
     ): Promise<void> {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!appState.fcmHandler) {
             await interaction.editReply("FCM Handler not active.");

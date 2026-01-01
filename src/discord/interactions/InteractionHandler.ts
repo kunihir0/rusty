@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, ComponentType, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, TextInputBuilder, TextInputStyle, type Interaction, ThreadChannel, type MessageActionRowComponent, type APIButtonComponentWithCustomId } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, ComponentType, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, TextInputBuilder, TextInputStyle, type Interaction, ThreadChannel, type MessageActionRowComponent, type APIButtonComponentWithCustomId, MessageFlags } from "discord.js";
 import path from "path";
 import { appState } from "../../state/AppState";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
@@ -28,12 +28,17 @@ async function findDeviceThread(guildId: string, threadName: string): Promise<Th
 }
 
 export async function handleInteraction(interaction: Interaction): Promise<boolean> {
+  // Delegate to Configuration Service
+  if (appState.configService) {
+      if (await appState.configService.handleInteraction(interaction)) return true;
+  }
+
   if (interaction.isButton()) {
     const customId = interaction.customId;
 
     // Watchlist Handlers
     if (customId === 'watchlist-refresh') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await refreshDashboard();
         await interaction.editReply("Dashboard refreshed.");
         return true;
@@ -43,7 +48,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
       const serverId = customId.substring(customId.indexOf('-') + 1);
       
       if (!appState.fcmHandler || !appState.fcmHandler.state.serverList[serverId]) {
-        await interaction.reply({ content: "Server data not found. It might be stale.", flags: [64] });
+        await interaction.reply({ content: "Server data not found. It might be stale.", flags: MessageFlags.Ephemeral });
         return true;
       }
 
@@ -69,12 +74,12 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
 
           newRustPlus.once('error', async (e) => {
             console.error(`Failed to pair with ${server.title}:`, e);
-            await interaction.followUp({ content: `Failed to connect: ${e.message}`, flags: [64] });
+            await interaction.followUp({ content: `Failed to connect: ${e.message}`, flags: MessageFlags.Ephemeral });
           });
 
         } catch (e: any) {
           console.error("Pairing failed:", e);
-          await interaction.followUp({ content: `An error occurred during pairing: ${e.message}`, flags: [64] });
+          await interaction.followUp({ content: `An error occurred during pairing: ${e.message}`, flags: MessageFlags.Ephemeral });
         }
       } else if (customId.startsWith("disconnect-")) {
         await interaction.deferUpdate();
@@ -94,7 +99,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         await interaction.editReply({ components: [row] });
 
       } else { // remove-
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
             if (!appState.fcmHandler) {
                 await interaction.editReply("FCM Handler is not active.");
@@ -161,11 +166,11 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                             newRustPlus.once('error', (e) => { clearTimeout(t); reject(e); });
                         });
                     } catch (e: any) {
-                        await interaction.reply({ content: `Failed to connect: ${e.message}`, flags: [64] });
+                        await interaction.reply({ content: `Failed to connect: ${e.message}`, flags: MessageFlags.Ephemeral });
                         return true;
                     }
                  } else {
-                     await interaction.reply({ content: "Not connected and cannot find server for this switch.", flags: [64] });
+                     await interaction.reply({ content: "Not connected and cannot find server for this switch.", flags: MessageFlags.Ephemeral });
                      return true;
                  }
             }
@@ -187,14 +192,14 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
 
             const switchState = currentServerId ? appState.fcmHandler?.state.serverList[currentServerId]?.switches[entityId] : undefined;
             if (!switchState) {
-                await interaction.followUp({ content: "Switch data not found.", flags: [64]});
+                await interaction.followUp({ content: "Switch data not found.", flags: MessageFlags.Ephemeral});
                 return true;
             }
 
             const newState = !switchState.active;
             appState.rustPlus!.setEntityValue(entityId, newState, (response) => {
                 if (!response.response || response.response.error) {
-                    interaction.followUp({ content: `Error toggling switch: ${response.response?.error?.error || 'Unknown Error'}`, flags: [64] });
+                    interaction.followUp({ content: `Error toggling switch: ${response.response?.error?.error || 'Unknown Error'}`, flags: MessageFlags.Ephemeral });
                 } else {
                     switchState.active = newState;
                     
@@ -243,7 +248,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
             return true;
 
         } else if (action === 'remove') {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             try {
                 if (!appState.fcmHandler) {
                      await interaction.editReply("FCM Handler inactive.");
@@ -316,7 +321,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                 );
                 await interaction.editReply({ components: [newRow] });
             } else {
-                await interaction.followUp({ content: "Could not find the alarm state to update.", flags: [64] });
+                await interaction.followUp({ content: "Could not find the alarm state to update.", flags: MessageFlags.Ephemeral });
             }
 
         } else if (action === 'dm') {
@@ -367,7 +372,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                 
                 await interaction.editReply({ embeds: [newEmbed] });
             } else {
-                 await interaction.followUp({ content: "Could not find alarm data.", flags: [64] });
+                 await interaction.followUp({ content: "Could not find alarm data.", flags: MessageFlags.Ephemeral });
             }
 
         } else if (action === 'edit') {
@@ -394,7 +399,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
             await interaction.showModal(modal);
             return true;
         } else if (action === 'remove') {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             try {
                 if (!appState.fcmHandler) {
                      await interaction.editReply("FCM Handler inactive.");
@@ -471,15 +476,15 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                 );
                 await interaction.editReply({ components: [newRow] });
             } else {
-                await interaction.followUp({ content: "Could not find the storage monitor state to update.", flags: [64] });
+                await interaction.followUp({ content: "Could not find the storage monitor state to update.", flags: MessageFlags.Ephemeral });
             }
         } else if (action === 'recycle') {
             if (!appState.rustPlus || !appState.rustPlus.isConnected()) {
-                await interaction.reply({ content: "Not connected to a Rust server.", flags: [64]});
+                await interaction.reply({ content: "Not connected to a Rust server.", flags: MessageFlags.Ephemeral});
                 return true;
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
             try {
                 const info = await appState.rustPlus.sendRequestAsync({
@@ -535,7 +540,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
             await interaction.showModal(modal);
             return true;
         } else if (action === 'remove') {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             try {
                 if (!appState.fcmHandler) {
                      await interaction.editReply("FCM Handler inactive.");
@@ -574,7 +579,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         const entityId = parseInt(interaction.customId.split('-')[3], 10);
         const newName = interaction.fields.getTextInputValue('name');
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!appState.fcmHandler) {
             await interaction.editReply("FCM Handler inactive.");
@@ -624,7 +629,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         const newName = interaction.fields.getTextInputValue('name');
         const newMessage = interaction.fields.getTextInputValue('message');
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!appState.fcmHandler) {
              await interaction.editReply("FCM Handler inactive.");
@@ -680,7 +685,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         const entityId = parseInt(interaction.customId.split('-')[3], 10);
         const newName = interaction.fields.getTextInputValue('name');
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!appState.fcmHandler) {
              await interaction.editReply("FCM Handler inactive.");
@@ -728,7 +733,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
   } else if (interaction.isStringSelectMenu()) {
     if (interaction.customId === 'watchlist-remove-menu') {
         const selectedValue = interaction.values[0];
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         const removed = removeFromWatchList(selectedValue);
         if (removed) {
@@ -746,7 +751,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         await interaction.deferUpdate();
 
         if (!appState.fcmHandler) {
-             await interaction.followUp({ content: "FCM Handler inactive.", flags: [64] });
+             await interaction.followUp({ content: "FCM Handler inactive.", flags: MessageFlags.Ephemeral });
              return true;
         }
         const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
@@ -794,7 +799,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
 
             await interaction.editReply({ embeds: [currentEmbed], components: newRows as any });
         } else {
-                await interaction.followUp({ content: "Switch not found.", flags: [64] });
+                await interaction.followUp({ content: "Switch not found.", flags: MessageFlags.Ephemeral });
         }
         return true;
     }

@@ -37,6 +37,7 @@ export async function connectToRustServer(serverId: string) {
             // 1. Get Basic Info
             const infoRes = await rustPlus!.sendRequestAsync({ getInfo: {} });
             const mapSize = infoRes.info?.mapSize || 4500;
+            appState.mapSize = mapSize;
 
             // 2. Initialize Services
             appState.teamTracker = new TeamTracker(mapSize);

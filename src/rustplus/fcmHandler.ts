@@ -244,7 +244,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
         };
 
         persistenceManager.saveState(state);
-        onEvent('PAIRING_SERVER', { serverId, data: serverData });
+        onEvent('PAIRING_SERVER', { serverId, data: serverData, isNew: !server });
     }
 
     async function _pairingEntitySwitch(title: string, message: string, body: any) {
