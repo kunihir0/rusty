@@ -10,6 +10,29 @@ const clients = new Map<string, BattlemetricsClient>();
 const teamDetector = new TeamDetectorService();
 const steamService = new SteamService();
 
+export function getBattleMetricsClient(serverId: string): BattlemetricsClient | undefined {
+    return clients.get(serverId);
+}
+
+export function generateBattleMetricsEmbed(client: BattlemetricsClient): EmbedBuilder {
+    const embed = new EmbedBuilder()
+        .setTitle(client.name || "Unknown Server")
+        .setURL(`https://www.battlemetrics.com/servers/rust/${client.id}`)
+        .setColor(client.server_status === 'online' ? Colors.Green : Colors.Red)
+        .addFields(
+            { name: 'Status', value: client.server_status || 'Unknown', inline: true },
+            { name: 'Rank', value: `#${client.server_rank || 'N/A'}`, inline: true },
+            { name: 'Players', value: `${client.server_players}/${client.server_maxPlayers}`, inline: true },
+            { name: 'Country', value: client.server_country || 'N/A', inline: true },
+            { name: 'FPS', value: client.server_rust_fps_avg ? client.server_rust_fps_avg.toFixed(0) : 'N/A', inline: true },
+            { name: 'Entities', value: client.server_rust_ent_cnt_i ? client.server_rust_ent_cnt_i.toLocaleString() : 'N/A', inline: true },
+            { name: 'Connect', value: `\`connect ${client.server_ip}:${client.server_port}\``, inline: false }
+        )
+        .setTimestamp();
+    
+    return embed;
+}
+
 interface WatchEntry {
     steamId: string;
     name: string; // Steam Name (used for matching)
@@ -301,11 +324,54 @@ async function updateWatchlistDashboard() {
     }
 }
 
+async function updateServerEmbeds() {
+    if (!appState.fcmHandler) return;
+
+    for (const [serverId, server] of Object.entries(appState.fcmHandler.state.serverList)) {
+        if (!server.discordThreadId || !server.battlemetricsMessageId || !server.battlemetricsId) continue;
+
+        const client = clients.get(serverId);
+        if (!client) continue;
+
+        try {
+            // Find thread
+            // We iterate channels to find the thread
+            for (const channel of appState.pairingChannels.values()) {
+                try {
+                    const thread = await channel.threads.fetch(server.discordThreadId).catch(() => null);
+                    if (thread) {
+                        const message = await thread.messages.fetch(server.battlemetricsMessageId).catch(() => null);
+                        if (message) {
+                            const embed = generateBattleMetricsEmbed(client);
+                            await message.edit({ embeds: [embed] });
+                            console.log(`[Battlemetrics] Updated embed for ${server.title}`);
+                        }
+                        break; // Found the thread, move to next server
+                    }
+                } catch (e) {
+                    // Ignore fetch errors
+                }
+            }
+        } catch (e) {
+            console.error(`[Battlemetrics] Failed to update embed for ${server.title}:`, e);
+        }
+    }
+}
+
+let updateCounter = 0;
+
 async function runLoop() {
     if (!appState.fcmHandler) return;
     
     const state = appState.fcmHandler.state;
     let needsDashboardUpdate = false;
+
+    // Run embed updates every 10 minutes (10 * 60s)
+    updateCounter++;
+    if (updateCounter >= 10) {
+        updateCounter = 0;
+        void updateServerEmbeds();
+    }
 
     for (const [serverId, server] of Object.entries(state.serverList)) {
         if (!server.battlemetricsId) continue;

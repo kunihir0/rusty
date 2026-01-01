@@ -7,7 +7,7 @@ import { RustPlus } from './ws';
 
 // Define PersistenceManager interface locally as the file was not found
 export interface PersistenceManager {
-    loadState: () => { serverList: Record<string, any>, serverListLite: Record<string, any> };
+    loadState: () => { serverList: Record<string, any>, serverListLite: Record<string, any>, persistentIds?: string[] };
     saveState: (state: any) => void;
 }
 
@@ -33,16 +33,17 @@ export function createFcmHandler(config: FcmHandlerConfig) {
     let client: PushReceiverClient | null = null;
     
     // State storage (initialized from persistence)
-    const state: { serverList: Record<string, any>, serverListLite: Record<string, any> } = persistenceManager.loadState();
-
-    // Ensure structure validity if file was empty or partial
-    if (!state.serverList) state.serverList = {};
-    if (!state.serverListLite) state.serverListLite = {};
+    const rawState = persistenceManager.loadState();
+    const state: { serverList: Record<string, any>, serverListLite: Record<string, any>, persistentIds: string[] } = {
+        serverList: rawState.serverList || {},
+        serverListLite: rawState.serverListLite || {},
+        persistentIds: rawState.persistentIds || []
+    };
 
     function start() {
         log(`Starting FCM Listener for SteamID: ${steamId}`);
         // The Client constructor in push-receiver expects persistentIds array
-        client = new PushReceiverClient(androidId, securityToken, []);
+        client = new PushReceiverClient(androidId, securityToken, state.persistentIds);
         
         client.on('ON_DATA_RECEIVED', (data: any) => _onDataReceived(data));
         
@@ -61,6 +62,13 @@ export function createFcmHandler(config: FcmHandlerConfig) {
     }
 
     function _onDataReceived(data: any) {
+        if (data.persistentId) {
+            if (!state.persistentIds.includes(data.persistentId)) {
+                state.persistentIds.push(data.persistentId);
+                persistenceManager.saveState(state);
+            }
+        }
+
         const appData = data.appData;
 
         if (!appData) {
@@ -99,7 +107,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
 
         switch (channelId) {
             case 'pairing':
-                void _handlePairing(title, message, body);
+                void _handlePairing(title, message, body, data.persistentId);
                 break;
             case 'alarm':
                 _handleAlarm(title, message, body);
@@ -116,11 +124,11 @@ export function createFcmHandler(config: FcmHandlerConfig) {
         }
     }
 
-    async function _handlePairing(title: string, message: string, body: any) {
+    async function _handlePairing(title: string, message: string, body: any, persistentId?: string) {
         switch (body.type) {
             case 'server':
                 log(`SteamID: ${steamId}, pairing: server`);
-                await _pairingServer(title, message, body);
+                await _pairingServer(title, message, body, persistentId);
                 break;
 
             case 'entity':
@@ -195,7 +203,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
         return url && (url.startsWith('https') || url.startsWith('http'));
     }
 
-    async function _pairingServer(title: string, message: string, body: any) {
+    async function _pairingServer(title: string, message: string, body: any, persistentId?: string) {
         const serverId = `${body.ip}-${body.port}`;
         const server = state.serverList[serverId];
 
@@ -244,7 +252,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
         };
 
         persistenceManager.saveState(state);
-        onEvent('PAIRING_SERVER', { serverId, data: serverData, isNew: !server });
+        onEvent('PAIRING_SERVER', { serverId, data: serverData, isNew: !server, persistentId });
     }
 
     async function _pairingEntitySwitch(title: string, message: string, body: any) {
@@ -296,7 +304,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
 
                 const teamInfo = await rustplus.sendRequestAsync({ getTeamInfo: {} });
                 if (teamInfo && !teamInfo.error && teamInfo.teamInfo) {
-                    const player = teamInfo.teamInfo.members.find((e: any) => e.steamId.toString() === rustplus['playerId']); // accessing private prop via string index or need getter
+                    const player = teamInfo.teamInfo.members.find((e: any) => e.steamId.toString() === rustplus!['playerId']); // accessing private prop via string index or need getter
                     if (player) {
                         // CorrectedMapSize is not exposed on RustPlus class. Assuming passed or accessible.
                         // For now, use 3000 as default or fix.
@@ -362,7 +370,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
 
                 const teamInfo = await rustplus.sendRequestAsync({ getTeamInfo: {} });
                 if (teamInfo && !teamInfo.error && teamInfo.teamInfo) {
-                    const player = teamInfo.teamInfo.members.find((e: any) => e.steamId.toString() === rustplus['playerId']);
+                    const player = teamInfo.teamInfo.members.find((e: any) => e.steamId.toString() === rustplus!['playerId']);
                     if (player) {
                         const location = MapUtils.getPos(player.x, player.y, (rustplus as any).info?.correctedMapSize || 4500, rustplus as any);
                         alarmData.location = location.location;
@@ -443,7 +451,7 @@ export function createFcmHandler(config: FcmHandlerConfig) {
 
                 const teamInfo = await rustplus.sendRequestAsync({ getTeamInfo: {} });
                 if (teamInfo && !teamInfo.error && teamInfo.teamInfo) {
-                    const player = teamInfo.teamInfo.members.find((e: any) => e.steamId.toString() === rustplus['playerId']);
+                    const player = teamInfo.teamInfo.members.find((e: any) => e.steamId.toString() === rustplus!['playerId']);
                     if (player) {
                         const location = MapUtils.getPos(player.x, player.y, (rustplus as any).info?.correctedMapSize || 4500, rustplus as any);
                         monitorData.location = location.location;

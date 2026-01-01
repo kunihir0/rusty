@@ -96,18 +96,20 @@ export class Credentials {
         const credentialsPath = path.join(process.cwd(), 'fcm-state.json');
         const persistence = new JsonPersistenceManager(credentialsPath);
         
-        const state = persistence.loadState();
+        let state;
+        if (appState.fcmHandler) {
+            // Use in-memory state as source of truth if available
+            state = appState.fcmHandler.state;
+        } else {
+            // Fallback to disk
+            state = persistence.loadState();
+        }
+
         const serverCount = Object.keys(state.serverList || {}).length;
-        
+
         state.serverList = {};
         state.serverListLite = {};
         
-        // Also update in-memory state if fcmHandler is active
-        if (appState.fcmHandler) {
-            appState.fcmHandler.state.serverList = {};
-            appState.fcmHandler.state.serverListLite = {};
-        }
-
         persistence.saveState(state);
 
         // 3. Delete Threads

@@ -4,11 +4,13 @@ import { appState } from "../../state/AppState";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
 import { connectToRustServer, getCurrentServerId } from "./RustPlusManager";
 import { configManager } from "../../config/BotConfig";
+import { createBattlemetricsClient } from "../../rustplus/services/battlemetrics";
+import { generateBattleMetricsEmbed, getBattleMetricsClient } from "./BattlemetricsManager";
 
 async function getTargetThreads(serverId: string, suffix: string): Promise<ThreadChannel[]> {
     const server = appState.fcmHandler?.state.serverList[serverId];
     if (!server) return [];
-
+    
     const threads: ThreadChannel[] = [];
     const threadName = `${server.title} - ${suffix}`;
 
@@ -88,7 +90,7 @@ export async function handleFcmEvent(type: string, data: any) {
                 { name: 'Port', value: data.data.appPort.toString(), inline: true },
                 { name: 'Player', value: data.data.steamId, inline: true }
             )
-            .setFooter({ text: "收到新的服务器配对" });
+            .setFooter({ text: `收到新的服务器配对 | ID: ${data.persistentId || 'N/A'}` });
 
             // Check connection status for button
             const isConnected = autoConnected || (appState.rustPlus && getCurrentServerId() === data.serverId);
@@ -105,6 +107,36 @@ export async function handleFcmEvent(type: string, data: any) {
             );
 
             await thread.send({ embeds: [serverEmbed], components: [row] });
+
+            // --- BattleMetrics Embed ---
+            if (data.data.battlemetricsId) {
+                try {
+                    // Initialize or get client
+                    let bmClient = getBattleMetricsClient(data.serverId);
+                    if (!bmClient) {
+                         bmClient = createBattlemetricsClient(data.data.battlemetricsId, null);
+                         await bmClient.setup();
+                    } else {
+                         // Force refresh if it exists
+                         await bmClient.evaluation();
+                    }
+                    
+                    if (bmClient) {
+                        const bmEmbed = generateBattleMetricsEmbed(bmClient);
+                        const bmMessage = await thread.send({ embeds: [bmEmbed] });
+                        
+                        // Save Message ID for updates
+                        if (appState.fcmHandler) {
+                            appState.fcmHandler.state.serverList[data.serverId].battlemetricsMessageId = bmMessage.id;
+                            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                            const persistence = new JsonPersistenceManager(fcmStatePath);
+                            persistence.saveState(appState.fcmHandler.state);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to generate/send BattleMetrics embed:", e);
+                }
+            }
 
         } catch (e) {
             console.error("Failed to create thread or send message:", e);
@@ -249,7 +281,7 @@ export async function handleFcmEvent(type: string, data: any) {
         for (const thread of threads) {
             const alarmName = alarm ? alarm.name : 'Smart Alarm';
             const embed = new EmbedBuilder()
-                .setTitle(`🚨 ${alarmName} Triggered!`)
+                .setTitle(`🚨 ${alarmName} Triggered!`) 
                 .setColor(Colors.Red)
                 .setDescription(data.message)
                 .setTimestamp();
