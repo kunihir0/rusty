@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import path from 'path';
 import { AppMap_Monument, AppMarker } from '../../gen/rustplus_pb';
+import { DeathRecord } from '../DeathHistoryManager';
 
 export class MapGenerator {
     private mapSize: number;
@@ -41,6 +42,82 @@ export class MapGenerator {
                 console.warn(`Failed to load image for ${key}: ${err.message}`);
             }
         }
+    }
+
+    public async generateHeatmap(rawJpgData: Uint8Array, deaths: DeathRecord[]): Promise<string> {
+        if (Object.keys(this.markerBuffers).length === 0) await this.init();
+
+        const baseMap = sharp(Buffer.from(rawJpgData));
+        const metadata = await baseMap.metadata();
+        const width = metadata.width || 0;
+        const height = metadata.height || 0;
+        const composites: sharp.OverlayOptions[] = [];
+
+        // 1. Bucket Deaths (Clustering)
+        const bucketSize = 25; // Pixel size of grid cells
+        const buckets: Record<string, { count: number, x: number, y: number }> = {};
+
+        for (const death of deaths) {
+            const { x, y } = this.gameToImageXY(death.x, death.y, width, height);
+            // Quantize coordinates to bucket grid
+            const bx = Math.floor(x / bucketSize);
+            const by = Math.floor(y / bucketSize);
+            const key = `${bx}_${by}`;
+
+            if (!buckets[key]) {
+                buckets[key] = { count: 0, x: bx * bucketSize + (bucketSize / 2), y: by * bucketSize + (bucketSize / 2) };
+            }
+            buckets[key].count++;
+        }
+
+        // 2. Generate Blobs for Buckets
+        for (const key in buckets) {
+            const { count, x, y } = buckets[key];
+            
+            // Determine Color & Opacity based on density
+            // Thermal Theme: Blue -> Green -> Yellow -> Red
+            let color = "rgb(0,0,255)"; // Blue (Low)
+            let opacity = 0.4;
+            let radius = 25; // Slightly larger than bucket to blend
+
+            if (count >= 10) {
+                color = "rgb(255,0,0)"; // Red (High)
+                opacity = 0.7;
+                radius = 35;
+            } else if (count >= 5) {
+                color = "rgb(255,165,0)"; // Orange
+                opacity = 0.6;
+                radius = 30;
+            } else if (count >= 3) {
+                color = "rgb(0,255,0)"; // Green
+                opacity = 0.5;
+                radius = 28;
+            }
+
+            const svg = `
+            <svg width="${radius * 2}" height="${radius * 2}" viewBox="0 0 ${radius * 2} ${radius * 2}" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <radialGradient id="grad_${key}" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+                        <stop offset="0%" style="stop-color:${color};stop-opacity:${opacity}" />
+                        <stop offset="100%" style="stop-color:${color};stop-opacity:0" />
+                    </radialGradient>
+                </defs>
+                <circle cx="${radius}" cy="${radius}" r="${radius}" fill="url(#grad_${key})" />
+            </svg>`;
+
+            composites.push({
+                input: Buffer.from(svg),
+                left: Math.round(x - radius),
+                top: Math.round(y - radius)
+            });
+        }
+
+        const outputPath = path.join(process.cwd(), 'map_heatmap.png');
+        await baseMap
+            .composite(composites)
+            .toFile(outputPath);
+
+        return outputPath;
     }
 
     /**

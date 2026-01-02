@@ -7,6 +7,7 @@ import { MapGenerator } from "../../rustplus/services/MapGenerator";
 import { VendingMachineService } from "../../rustplus/services/VendingMachineService";
 import { EmbedBuilder, Colors } from "discord.js";
 import { configManager } from "../../config/BotConfig";
+import { deathHistory } from "../../rustplus/DeathHistoryManager";
 
 let rustPlus: RustPlus | null = null;
 let currentServerId: string | null = null;
@@ -154,6 +155,15 @@ async function handleTeamEvents(events: { deaths: DeathEvent[], afk: AfkEvent[] 
             // Handle Deaths
             if (configManager.getConfig().enableDeathNotifications) {
                 for (const death of events.deaths) {
+                    // Save to history
+                    deathHistory.addDeath({
+                        x: death.x,
+                        y: death.y,
+                        name: death.name,
+                        steamId: death.steamId,
+                        timestamp: death.deathTime * 1000 // Convert to ms if needed, check TeamTracker usage
+                    });
+
                     const embed = new EmbedBuilder()
                         .setColor(Colors.Red)
                         .setAuthor({ name: death.name, iconURL: 'https://i.imgur.com/8j9z3fE.png' })

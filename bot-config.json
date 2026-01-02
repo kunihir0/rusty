@@ -1,11 +1,12 @@
 {
   "ingamePrefix": "@",
   "replyCooldownSeconds": 10,
+  "afkTimeoutSeconds": 300,
   "enableShopCommand": true,
   "enableTeamChatLogging": false,
   "enableDeathNotifications": true,
   "enableWatchlistCommands": true,
   "enableJoinLeaveNotifications": true,
   "enableAfkNotifications": true,
-  "configAdminRoleId": "1429941029410312304"
+  "configAdminRoleId": "1430611063895888025"
 }
