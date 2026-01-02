@@ -6,6 +6,7 @@ import { TeamTracker } from "../../rustplus/services/TeamTracker";
 import { MapGenerator } from "../../rustplus/services/MapGenerator";
 import { VendingMachineService } from "../../rustplus/services/VendingMachineService";
 import { EmbedBuilder, Colors } from "discord.js";
+import { configManager } from "../../config/BotConfig";
 
 let rustPlus: RustPlus | null = null;
 let currentServerId: string | null = null;
@@ -124,6 +125,7 @@ export async function connectToRustServer(serverId: string) {
 
 async function handleDeathEvents(deaths: any[], serverTitle: string) {
     if (deaths.length === 0) return;
+    if (!configManager.getConfig().enableDeathNotifications) return;
 
     const threadName = `${serverTitle} - Team Chat`;
                 

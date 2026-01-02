@@ -361,6 +361,8 @@ export async function handleFcmEvent(type: string, data: any) {
             }
         }
     } else if (type === 'TEAM_LOGIN') {
+        if (!configManager.getConfig().enableJoinLeaveNotifications) return;
+
         // data: { title, message, body, targetImage }
         for (const channel of appState.pairingChannels.values()) {
             const fetched = await channel.threads.fetch();

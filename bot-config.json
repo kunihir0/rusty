@@ -2,6 +2,9 @@
   "ingamePrefix": "@",
   "replyCooldownSeconds": 10,
   "enableShopCommand": true,
-  "enableTeamChatLogging": true,
-  "enableDeathNotifications": true
+  "enableTeamChatLogging": false,
+  "enableDeathNotifications": true,
+  "enableWatchlistCommands": true,
+  "enableJoinLeaveNotifications": true,
+  "configAdminRoleId": "1429941029410312304"
 }
