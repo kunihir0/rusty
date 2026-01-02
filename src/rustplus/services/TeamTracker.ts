@@ -1,5 +1,6 @@
 import { AppTeamInfo } from "../../gen/rustplus_pb";
 import * as MapUtils from "../utils/Map";
+import { configManager } from "../../config/BotConfig";
 
 interface PlayerState {
     steamId: string;
@@ -10,6 +11,8 @@ interface PlayerState {
     isOnline: boolean;
     deathTime: number;
     spawnTime: number;
+    lastActiveTime: number;
+    isAfk: boolean;
 }
 
 export interface DeathEvent {
@@ -19,6 +22,14 @@ export interface DeathEvent {
     x: number;
     y: number;
     deathTime: number;
+}
+
+export interface AfkEvent {
+    steamId: string;
+    name: string;
+    isAfk: boolean;
+    time: number;
+    timeSpent?: number;
 }
 
 export class TeamTracker {
@@ -36,14 +47,91 @@ export class TeamTracker {
     /**
      * Process a team update from Rust+.
      * @param teamInfo The raw teamInfo object from the Rust+ App.
-     * @returns An array of death event objects.
+     * @returns An object containing death events and afk events.
      */
-    public processTeamUpdate(teamInfo: AppTeamInfo): DeathEvent[] {
+    public processTeamUpdate(teamInfo: AppTeamInfo): { deaths: DeathEvent[], afk: AfkEvent[] } {
         const deathEvents: DeathEvent[] = [];
+        const afkEvents: AfkEvent[] = [];
+        const now = Date.now();
 
         for (const member of teamInfo.members) {
             const steamId = member.steamId.toString();
-            const currentPlayerState: PlayerState = {
+            
+            let lastActiveTime = now;
+            let isAfk = false;
+
+            // If we have seen this player before, check for state changes
+            if (this.players.has(steamId)) {
+                const prev = this.players.get(steamId)!;
+                
+                // AFK Logic
+                const hasMoved = member.x !== prev.x || member.y !== prev.y;
+                const lifeChanged = member.isAlive !== prev.isAlive;
+                const cameOnline = member.isOnline && !prev.isOnline;
+                
+                const isActive = hasMoved || lifeChanged || cameOnline;
+
+                if (isActive) {
+                    lastActiveTime = now;
+                    if (prev.isAfk) {
+                        // Returned from AFK
+                        isAfk = false;
+                        afkEvents.push({
+                            steamId,
+                            name: member.name,
+                            isAfk: false,
+                            time: now,
+                            timeSpent: now - prev.lastActiveTime
+                        });
+                    }
+                } else {
+                    lastActiveTime = prev.lastActiveTime;
+                    isAfk = prev.isAfk;
+
+                    if (member.isOnline && !isAfk) {
+                        const timeout = configManager.getConfig().afkTimeoutSeconds;
+                        if (now - lastActiveTime > timeout * 1000) {
+                            isAfk = true;
+                            afkEvents.push({
+                                steamId,
+                                name: member.name,
+                                isAfk: true,
+                                time: now
+                            });
+                        }
+                    } else if (!member.isOnline) {
+                         isAfk = false; 
+                    }
+                }
+
+                // Death Logic
+                const justDied = (prev.isAlive && !member.isAlive) || 
+                                 (member.deathTime !== prev.deathTime && member.deathTime > 0);
+
+                if (justDied) {
+                    console.log(`[TeamTracker] Death detected: ${member.name} (${steamId}) at ${member.x},${member.y}`);
+                    let x = member.x;
+                    let y = member.y;
+
+                    if (x === 0 && y === 0) {
+                        x = prev.x;
+                        y = prev.y;
+                    }
+                    
+                    const pos = MapUtils.getPos(x, y, this.mapSize, null);
+
+                    deathEvents.push({
+                        steamId: steamId,
+                        name: member.name,
+                        grid: pos.location,
+                        x: x,
+                        y: y,
+                        deathTime: member.deathTime
+                    });
+                }
+            }
+
+            const newState: PlayerState = {
                 steamId: steamId,
                 name: member.name,
                 x: member.x,
@@ -51,57 +139,14 @@ export class TeamTracker {
                 isAlive: member.isAlive,
                 isOnline: member.isOnline,
                 deathTime: member.deathTime,
-                spawnTime: member.spawnTime
+                spawnTime: member.spawnTime,
+                lastActiveTime,
+                isAfk
             };
 
-            // If we have seen this player before, check for state changes
-            if (this.players.has(steamId)) {
-                const previousState = this.players.get(steamId)!;
-
-                // Debug: Log state comparison for active/alive changes
-                if (previousState.isAlive !== currentPlayerState.isAlive || currentPlayerState.deathTime !== previousState.deathTime) {
-                    console.log(`[TeamTracker] State Change for ${currentPlayerState.name}:`, 
-                        `Alive: ${previousState.isAlive} -> ${currentPlayerState.isAlive}`,
-                        `DeathTime: ${previousState.deathTime} -> ${currentPlayerState.deathTime}`
-                    );
-                }
-
-                // Check for death
-                // A player is dead if isAlive goes from true to false, OR if the deathTime timestamp updates (and is non-zero)
-                const justDied = (previousState.isAlive && !currentPlayerState.isAlive) || 
-                                 (currentPlayerState.deathTime !== previousState.deathTime && currentPlayerState.deathTime > 0);
-
-                if (justDied) {
-                    console.log(`[TeamTracker] Death detected: ${currentPlayerState.name} (${steamId}) at ${currentPlayerState.x},${currentPlayerState.y}`);
-                    // Calculate grid location
-                    // Use previous location if current is 0,0 (often happens on death) or null
-                    // Note: In Rust+, dead players might have 0,0 or last known pos.
-                    // We prioritize the one that isn't 0 if possible, or previous.
-                    let x = currentPlayerState.x;
-                    let y = currentPlayerState.y;
-
-                    if (x === 0 && y === 0) {
-                        x = previousState.x;
-                        y = previousState.y;
-                    }
-                    
-                    const pos = MapUtils.getPos(x, y, this.mapSize, null);
-
-                    deathEvents.push({
-                        steamId: steamId,
-                        name: currentPlayerState.name,
-                        grid: pos.location, // e.g., "G15"
-                        x: x,
-                        y: y,
-                        deathTime: currentPlayerState.deathTime
-                    });
-                }
-            }
-
-            // Update stored state
-            this.players.set(steamId, currentPlayerState);
+            this.players.set(steamId, newState);
         }
 
-        return deathEvents;
+        return { deaths: deathEvents, afk: afkEvents };
     }
 }

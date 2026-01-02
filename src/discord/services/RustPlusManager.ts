@@ -2,7 +2,7 @@ import { RustPlus } from "../../rustplus/ws";
 import { appState } from "../../state/AppState";
 import { AppMessage } from "../../gen/rustplus_pb";
 import { onRustMessage } from "./TeamChatBridge";
-import { TeamTracker } from "../../rustplus/services/TeamTracker";
+import { TeamTracker, DeathEvent, AfkEvent } from "../../rustplus/services/TeamTracker";
 import { MapGenerator } from "../../rustplus/services/MapGenerator";
 import { VendingMachineService } from "../../rustplus/services/VendingMachineService";
 import { EmbedBuilder, Colors } from "discord.js";
@@ -70,8 +70,8 @@ export async function connectToRustServer(serverId: string) {
                 try {
                     const polledTeam = await rustPlus.sendRequestAsync({ getTeamInfo: {} }, 2000); // 2s timeout
                     if (polledTeam.teamInfo && appState.teamTracker) {
-                        const deaths = appState.teamTracker.processTeamUpdate(polledTeam.teamInfo);
-                        handleDeathEvents(deaths, server.title);
+                        const events = appState.teamTracker.processTeamUpdate(polledTeam.teamInfo);
+                        handleTeamEvents(events, server.title);
                     }
                 } catch (e) {
                     // Ignore timeouts/errors in polling to avoid spam
@@ -106,8 +106,8 @@ export async function connectToRustServer(serverId: string) {
 
         // Team Tracker (Broadcast)
         if (msg.broadcast && msg.broadcast.teamChanged && msg.broadcast.teamChanged.teamInfo && appState.teamTracker) {
-            const deaths = appState.teamTracker.processTeamUpdate(msg.broadcast.teamChanged.teamInfo);
-            handleDeathEvents(deaths, server.title);
+            const events = appState.teamTracker.processTeamUpdate(msg.broadcast.teamChanged.teamInfo);
+            handleTeamEvents(events, server.title);
         }
     });
 
@@ -123,11 +123,11 @@ export async function connectToRustServer(serverId: string) {
     return rustPlus;
 }
 
-async function handleDeathEvents(deaths: any[], serverTitle: string) {
-    if (deaths.length === 0) return;
-    if (!configManager.getConfig().enableDeathNotifications) return;
+async function handleTeamEvents(events: { deaths: DeathEvent[], afk: AfkEvent[] }, serverTitle: string) {
+    if (events.deaths.length === 0 && events.afk.length === 0) return;
 
-    const threadName = `${serverTitle} - Team Chat`;
+    // Redirect to Activity Thread
+    const threadName = `${serverTitle} - Activity`;
                 
     for (const channel of appState.pairingChannels.values()) {
         let target: any = channel.threads.cache.find(t => t.name === threadName);
@@ -141,24 +141,55 @@ async function handleDeathEvents(deaths: any[], serverTitle: string) {
                     target = await channel.threads.create({
                         name: threadName,
                         autoArchiveDuration: 10080,
-                        reason: 'Team Chat & Events'
+                        reason: 'Activity Log'
                     });
                     }
             } catch (e) {
-                console.error("Failed to find/create Team Chat thread:", e);
+                console.error("Failed to find/create Activity thread:", e);
                 continue;
             }
         }
         
         if (target) {
-            for (const death of deaths) {
-                const embed = new EmbedBuilder()
-                    .setColor(Colors.Red)
-                    .setAuthor({ name: death.name, iconURL: 'https://i.imgur.com/8j9z3fE.png' })
-                    .setDescription(`**Died at ${death.grid || 'Unknown'}**`)
-                    .setTimestamp(death.deathTime > 0 ? death.deathTime * 1000 : Date.now());
-                
-                await target.send({ embeds: [embed] });
+            // Handle Deaths
+            if (configManager.getConfig().enableDeathNotifications) {
+                for (const death of events.deaths) {
+                    const embed = new EmbedBuilder()
+                        .setColor(Colors.Red)
+                        .setAuthor({ name: death.name, iconURL: 'https://i.imgur.com/8j9z3fE.png' })
+                        .setDescription(`**Died at ${death.grid || 'Unknown'}**`)
+                        .setTimestamp(death.deathTime > 0 ? death.deathTime * 1000 : Date.now());
+                    
+                    await target.send({ embeds: [embed] });
+                }
+            }
+
+            // Handle AFK
+            if (configManager.getConfig().enableAfkNotifications) {
+                for (const afk of events.afk) {
+                    let desc = afk.isAfk ? `**is now AFK**` : `**is back!**`;
+                    
+                    if (!afk.isAfk && afk.timeSpent) {
+                        const seconds = Math.floor(afk.timeSpent / 1000);
+                        const minutes = Math.floor(seconds / 60);
+                        const hours = Math.floor(minutes / 60);
+                        
+                        let durationStr = "";
+                        if (hours > 0) durationStr += `${hours}h `;
+                        if (minutes % 60 > 0) durationStr += `${minutes % 60}m `;
+                        if (seconds % 60 > 0 || durationStr === "") durationStr += `${seconds % 60}s`;
+                        
+                        desc += ` (Was AFK for ${durationStr})`;
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setColor(afk.isAfk ? Colors.Yellow : Colors.Green)
+                        .setAuthor({ name: afk.name })
+                        .setDescription(desc)
+                        .setTimestamp(afk.time);
+                    
+                    await target.send({ embeds: [embed] });
+                }
             }
         }
     }

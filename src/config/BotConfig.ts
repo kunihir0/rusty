@@ -4,22 +4,26 @@ import path from 'path';
 export interface BotConfig {
     ingamePrefix: string;
     replyCooldownSeconds: number;
+    afkTimeoutSeconds: number;
     enableShopCommand: boolean;
     enableTeamChatLogging: boolean;
     enableDeathNotifications: boolean;
     enableWatchlistCommands: boolean;
     enableJoinLeaveNotifications: boolean;
+    enableAfkNotifications: boolean;
     configAdminRoleId: string | null;
 }
 
 const DEFAULT_CONFIG: BotConfig = {
     ingamePrefix: '@',
     replyCooldownSeconds: 10,
+    afkTimeoutSeconds: 300,
     enableShopCommand: true,
     enableTeamChatLogging: true,
     enableDeathNotifications: true,
     enableWatchlistCommands: true,
     enableJoinLeaveNotifications: true,
+    enableAfkNotifications: true,
     configAdminRoleId: null
 };
 

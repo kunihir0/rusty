@@ -6,5 +6,6 @@
   "enableDeathNotifications": true,
   "enableWatchlistCommands": true,
   "enableJoinLeaveNotifications": true,
+  "enableAfkNotifications": true,
   "configAdminRoleId": "1429941029410312304"
 }

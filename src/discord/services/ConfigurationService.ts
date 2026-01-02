@@ -90,10 +90,11 @@ export class ConfigurationService {
             .addFields(
                 { name: "In-Game Prefix", value: `\`${config.ingamePrefix}\``, inline: true },
                 { name: "Reply Cooldown", value: `${config.replyCooldownSeconds} seconds`, inline: true },
+                { name: "AFK Timeout", value: `${config.afkTimeoutSeconds} seconds`, inline: true },
                 { name: "Admin Role", value: adminRole, inline: true },
                 {
                     name: "Features", 
-                    value: `Shop Cmd: ${config.enableShopCommand ? '✅' : '❌'}\nChat Log: ${config.enableTeamChatLogging ? '✅' : '❌'}\nDeath Notes: ${config.enableDeathNotifications ? '✅' : '❌'}\nWatchlist Cmd: ${config.enableWatchlistCommands ? '✅' : '❌'}\nJoin/Leave: ${config.enableJoinLeaveNotifications ? '✅' : '❌'}`, 
+                    value: `Shop Cmd: ${config.enableShopCommand ? '✅' : '❌'}\nChat Log: ${config.enableTeamChatLogging ? '✅' : '❌'}\nDeath Notes: ${config.enableDeathNotifications ? '✅' : '❌'}\nWatchlist Cmd: ${config.enableWatchlistCommands ? '✅' : '❌'}\nJoin/Leave: ${config.enableJoinLeaveNotifications ? '✅' : '❌'}\nAFK Tracking: ${config.enableAfkNotifications ? '✅' : '❌'}`, 
                     inline: false 
                 }
             )
@@ -103,6 +104,7 @@ export class ConfigurationService {
             .addComponents(
                 new ButtonBuilder().setCustomId('config-prefix').setLabel('Change Prefix').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('config-cooldown').setLabel('Change Cooldown').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('config-afk-timeout').setLabel('Change AFK Time').setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId('config-refresh').setLabel('Refresh').setStyle(ButtonStyle.Secondary)
             );
 
@@ -110,27 +112,35 @@ export class ConfigurationService {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('config-toggle-shop')
-                    .setLabel(`Shop Cmd: ${config.enableShopCommand ? 'ON' : 'OFF'}`)
+                    .setLabel(`Shop: ${config.enableShopCommand ? 'ON' : 'OFF'}`)
                     .setStyle(config.enableShopCommand ? ButtonStyle.Success : ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId('config-toggle-chat')
-                    .setLabel(`Chat Log: ${config.enableTeamChatLogging ? 'ON' : 'OFF'}`)
+                    .setLabel(`Chat: ${config.enableTeamChatLogging ? 'ON' : 'OFF'}`)
                     .setStyle(config.enableTeamChatLogging ? ButtonStyle.Success : ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId('config-toggle-death')
-                    .setLabel(`Death Notes: ${config.enableDeathNotifications ? 'ON' : 'OFF'}`)
+                    .setLabel(`Deaths: ${config.enableDeathNotifications ? 'ON' : 'OFF'}`)
                     .setStyle(config.enableDeathNotifications ? ButtonStyle.Success : ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId('config-toggle-watchlist')
                     .setLabel(`Watchlist: ${config.enableWatchlistCommands ? 'ON' : 'OFF'}`)
                     .setStyle(config.enableWatchlistCommands ? ButtonStyle.Success : ButtonStyle.Danger),
                 new ButtonBuilder()
+                    .setCustomId('config-toggle-afk')
+                    .setLabel(`AFK: ${config.enableAfkNotifications ? 'ON' : 'OFF'}`)
+                    .setStyle(config.enableAfkNotifications ? ButtonStyle.Success : ButtonStyle.Danger)
+            );
+
+        const row3 = new ActionRowBuilder<ButtonBuilder>()
+             .addComponents(
+                new ButtonBuilder()
                     .setCustomId('config-toggle-joinleave')
                     .setLabel(`Join/Leave: ${config.enableJoinLeaveNotifications ? 'ON' : 'OFF'}`)
                     .setStyle(config.enableJoinLeaveNotifications ? ButtonStyle.Success : ButtonStyle.Danger)
-            );
+             );
 
-        const row3 = new ActionRowBuilder<RoleSelectMenuBuilder>()
+        const row4 = new ActionRowBuilder<RoleSelectMenuBuilder>()
             .addComponents(
                 new RoleSelectMenuBuilder()
                     .setCustomId('config-role-select')
@@ -138,9 +148,9 @@ export class ConfigurationService {
             );
 
         if (existingMsg) {
-            await existingMsg.edit({ embeds: [embed], components: [row1, row2, row3] });
+            await existingMsg.edit({ embeds: [embed], components: [row1, row2, row3, row4] });
         } else {
-            await channel.send({ embeds: [embed], components: [row1, row2, row3] });
+            await channel.send({ embeds: [embed], components: [row1, row2, row3, row4] });
         }
     }
 
@@ -211,6 +221,15 @@ export class ConfigurationService {
                 }
                 return true;
             }
+            if (interaction.customId === 'config-toggle-afk') {
+                const current = configManager.getConfig().enableAfkNotifications;
+                configManager.updateConfig({ enableAfkNotifications: !current });
+                if (interaction.channel instanceof TextChannel) {
+                    await interaction.deferUpdate();
+                    await this.renderDashboard(interaction.channel);
+                }
+                return true;
+            }
             if (interaction.customId === 'config-toggle-joinleave') {
                 const current = configManager.getConfig().enableJoinLeaveNotifications;
                 configManager.updateConfig({ enableJoinLeaveNotifications: !current });
@@ -253,6 +272,22 @@ export class ConfigurationService {
                 await interaction.showModal(modal);
                 return true;
             }
+            if (interaction.customId === 'config-afk-timeout') {
+                const modal = new ModalBuilder()
+                    .setTitle("Change AFK Timeout")
+                    .setCustomId("modal-config-afk");
+                
+                const input = new TextInputBuilder()
+                    .setCustomId("afk-input")
+                    .setLabel("Timeout (seconds)")
+                    .setStyle(TextInputStyle.Short)
+                    .setValue(configManager.getConfig().afkTimeoutSeconds.toString())
+                    .setRequired(true);
+                
+                modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+                await interaction.showModal(modal);
+                return true;
+            }
         }
 
         if (interaction.isModalSubmit()) {
@@ -281,6 +316,21 @@ export class ConfigurationService {
                     }
                 } else {
                     await interaction.reply({ content: "Invalid number.", flags: MessageFlags.Ephemeral });
+                }
+                return true;
+            }
+            if (interaction.customId === 'modal-config-afk') {
+                const val = parseInt(interaction.fields.getTextInputValue('afk-input'), 10);
+                if (!isNaN(val) && val >= 60) {
+                    configManager.updateConfig({ afkTimeoutSeconds: val });
+                    if (interaction.channel instanceof TextChannel) {
+                        await interaction.deferUpdate();
+                        await this.renderDashboard(interaction.channel);
+                    } else {
+                        await interaction.reply({ content: "Updated!", flags: MessageFlags.Ephemeral });
+                    }
+                } else {
+                    await interaction.reply({ content: "Invalid number (min 60s).", flags: MessageFlags.Ephemeral });
                 }
                 return true;
             }
