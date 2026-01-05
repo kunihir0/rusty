@@ -38,6 +38,7 @@ interface WatchEntry {
     steamId: string;
     name: string; // Steam Name (used for matching)
     addedAt: number;
+    lastDetectionMessageIds?: Record<string, string>; // guildId -> messageId
 }
 
 // Persistence Setup
@@ -464,7 +465,7 @@ async function runLoop() {
                             console.log(`[Watchlist] Watched player ${entry.name} detected on ${server.title}!`);
                             
                             // Run detection
-                            teamDetector.detectTeam(entry.steamId, onlineNames).then(teammates => {
+                            teamDetector.detectTeam(entry.steamId, onlineNames).then(async teammates => {
                                 if (teammates.length > 0) {
                                     const teamEmbed = new EmbedBuilder()
                                         .setTitle(`🚨 Watched Player Detected: ${entry.name}`)
@@ -476,9 +477,41 @@ async function runLoop() {
                                         })
                                         .setTimestamp();
                                     
-                                    for (const channel of appState.pairingChannels.values()) {
-                                        channel.send({ embeds: [teamEmbed] });
+                                    if (!entry.lastDetectionMessageIds) {
+                                        entry.lastDetectionMessageIds = {};
                                     }
+
+                                    for (const channel of appState.pairingChannels.values()) {
+                                        try {
+                                            let thread = channel.threads.cache.find(t => t.name === "MSS Watchlist") as ThreadChannel;
+                                            if (!thread) {
+                                                const fetched = await channel.threads.fetch();
+                                                thread = fetched.threads.find(t => t.name === "MSS Watchlist") as ThreadChannel;
+                                            }
+
+                                            if (thread) {
+                                                const guildId = channel.guild.id;
+                                                const oldMsgId = entry.lastDetectionMessageIds![guildId];
+                                                
+                                                if (oldMsgId) {
+                                                    try {
+                                                        const oldMsg = await thread.messages.fetch(oldMsgId).catch(() => null);
+                                                        if (oldMsg) await oldMsg.delete();
+                                                    } catch (e) {
+                                                        // Ignore delete errors (msg missing etc)
+                                                    }
+                                                }
+
+                                                const newMsg = await thread.send({ embeds: [teamEmbed] });
+                                                entry.lastDetectionMessageIds![guildId] = newMsg.id;
+                                            } else {
+                                                console.warn(`[Watchlist] MSS Watchlist thread not found in ${channel.name}, skipping embed.`);
+                                            }
+                                        } catch (e) {
+                                            console.error("[Watchlist] Failed to send detection embed:", e);
+                                        }
+                                    }
+                                    saveWatchlist();
                                 }
                             }).catch(err => console.error("[Watchlist] Detection failed:", err));
                         }
