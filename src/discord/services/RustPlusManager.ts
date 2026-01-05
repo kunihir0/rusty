@@ -8,6 +8,7 @@ import { VendingMachineService } from "../../rustplus/services/VendingMachineSer
 import { EmbedBuilder, Colors } from "discord.js";
 import { configManager } from "../../config/BotConfig";
 import { deathHistory } from "../../rustplus/DeathHistoryManager";
+import { afkStatistics } from "../../rustplus/AfkStatisticsManager";
 
 let rustPlus: RustPlus | null = null;
 let currentServerId: string | null = null;
@@ -180,6 +181,9 @@ async function handleTeamEvents(events: { deaths: DeathEvent[], afk: AfkEvent[] 
                     let desc = afk.isAfk ? `**is now AFK**` : `**is back!**`;
                     
                     if (!afk.isAfk && afk.timeSpent) {
+                        // Record stats
+                        afkStatistics.addAfkTime(afk.steamId, afk.name, afk.timeSpent);
+
                         const seconds = Math.floor(afk.timeSpent / 1000);
                         const minutes = Math.floor(seconds / 60);
                         const hours = Math.floor(minutes / 60);

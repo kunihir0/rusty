@@ -39,6 +39,23 @@ export class DeathHistoryManager {
         return this.deaths.filter(d => d.timestamp >= sinceTimestamp);
     }
 
+    public getLeaderboard(limit: number = 10): { name: string, count: number }[] {
+        const counts: Record<string, { name: string, count: number }> = {};
+
+        for (const death of this.deaths) {
+            if (!counts[death.steamId]) {
+                counts[death.steamId] = { name: death.name, count: 0 };
+            }
+            counts[death.steamId].count++;
+            // Update name to latest
+            counts[death.steamId].name = death.name;
+        }
+
+        return Object.values(counts)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, limit);
+    }
+
     public clear() {
         this.deaths = [];
         this.save();

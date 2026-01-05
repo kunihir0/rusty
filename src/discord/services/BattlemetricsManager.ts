@@ -179,17 +179,16 @@ export function getWatchListStatus(): string {
     const offline: string[] = [];
 
     // We check all clients to see who is online
-    // A player is online if they are in ANY tracked server's onlinePlayers list
+    // A player is online if they are in ANY tracked server's onlinePlayers list OR if their player object status is true
     
     for (const [steamId, entry] of watchedPlayers) {
         let isOnline = false;
         for (const client of clients.values()) {
-            if (client.onlinePlayers.includes(steamId)) {
+            const onlineNames = client.onlinePlayers.map((id: string) => client.players[id]?.name);
+            if (onlineNames.includes(entry.name)) {
                 isOnline = true;
                 break;
             }
-            // Fallback: Check by name if ID match fails (though ID match is better)
-            // client.onlinePlayers is IDs. client.players[id].name is name.
         }
 
         if (isOnline) online.push(entry.name);
