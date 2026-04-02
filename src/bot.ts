@@ -13,6 +13,8 @@ import { connectToRustServer } from "./discord/services/RustPlusManager";
 
 import { ConfigurationService } from "./discord/services/ConfigurationService";
 
+export const dataDir = process.env.DATA_DIR ?? path.join(process.cwd(), 'data');
+
 export const bot = new Client({
   // To use only guild command
   // botGuilds: [(client) => client.guilds.cache.map((guild) => guild.id)],
@@ -64,7 +66,6 @@ bot.once("clientReady", async () => {
   }
 
   // Load credentials and initialize handlers
-export const dataDir = process.env.DATA_DIR ?? path.join(process.cwd(), 'data');
   const credentialsPath = path.join(dataDir, 'credentials.json');
   const credentialManager = new JsonPersistenceManager(credentialsPath);
   const savedCreds = credentialManager.loadState();
@@ -110,11 +111,13 @@ export const dataDir = process.env.DATA_DIR ?? path.join(process.cwd(), 'data');
         const servers = Object.keys(appState.fcmHandler.state.serverList);
         if (servers.length > 0) {
             const lastServer = servers[servers.length - 1]; // Pick last added or arbitrary
-            console.log(`[Auto-Connect] Connecting to saved server: ${appState.fcmHandler.state.serverList[lastServer].title}`);
-            try {
-                connectToRustServer(lastServer);
-            } catch (e) {
-                console.error("[Auto-Connect] Failed:", e);
+            if (lastServer) {
+                console.log(`[Auto-Connect] Connecting to saved server: ${appState.fcmHandler.state.serverList[lastServer].title}`);
+                try {
+                    connectToRustServer(lastServer);
+                } catch (e) {
+                    console.error("[Auto-Connect] Failed:", e);
+                }
             }
         }
     }

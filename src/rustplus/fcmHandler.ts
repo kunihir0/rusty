@@ -16,9 +16,9 @@ export interface FcmHandlerConfig {
     securityToken: string;
     steamId: string;
     persistenceManager: PersistenceManager;
-    rustplus?: RustPlus;
-    onEvent?: (type: string, data: any) => void;
-    log?: (msg: string) => void;
+    rustplus?: RustPlus | undefined;
+    onEvent?: ((type: string, data: any) => void) | undefined;
+    log?: ((msg: string) => void) | undefined;
 }
 
 export function createFcmHandler(config: FcmHandlerConfig) {
