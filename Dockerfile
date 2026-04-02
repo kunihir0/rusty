@@ -1,24 +1,32 @@
 FROM oven/bun:1-alpine AS base
 WORKDIR /app
 
-# Install dependencies in a separate stage for caching
-FROM base AS install
+# Stage 1: Install ALL dependencies (including devDependencies for buf)
+FROM base AS install-all
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+# Stage 2: Install ONLY production dependencies
+FROM base AS install-prod
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
-# Build stage
+# Stage 3: Build/Generate stage
 FROM base AS builder
-COPY --from=install /app/node_modules ./node_modules
+COPY --from=install-all /app/node_modules ./node_modules
 COPY . .
-# Generate protobufs
+# Generate protobufs (buf is now available in node_modules)
 RUN bun run generate
 
-# Final production stage
+# Stage 4: Final production release
 FROM base AS release
-# Install libc6-compat for sharp/native modules and other runtime dependencies
+# Install runtime dependencies for native modules
 RUN apk add --no-cache libc6-compat
 
-COPY --from=install /app/node_modules ./node_modules
+# Copy production node_modules
+COPY --from=install-prod /app/node_modules ./node_modules
+
+# Copy source and generated files
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/proto ./proto
 COPY --from=builder /app/package.json ./package.json
@@ -27,11 +35,7 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 # Create data directory and set permissions
 RUN mkdir -p /app/data && chown -R bun:bun /app/data
 
-# Optional: User bun for security
 USER bun
-
-# Set environment variables
 ENV NODE_ENV=production
 
-# Start the bot directly with Bun
 ENTRYPOINT ["bun", "run", "src/main.ts"]
