@@ -1,36 +1,37 @@
-## build runner
-FROM node:lts-alpine as build-runner
-
-# Set temp directory
-WORKDIR /tmp/app
-
-# Move package.json
-COPY package.json .
-
-# Install dependencies
-RUN npm install
-
-# Move source files
-COPY src ./src
-COPY tsconfig.json   .
-
-# Build project
-RUN npm run build
-
-## production runner
-FROM node:lts-alpine as prod-runner
-
-# Set work directory
+FROM oven/bun:1-alpine AS base
 WORKDIR /app
 
-# Copy package.json from build-runner
-COPY --from=build-runner /tmp/app/package.json /app/package.json
+# Install dependencies in a separate stage for caching
+FROM base AS install
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
-# Install dependencies
-RUN npm install --omit=dev
+# Build stage
+FROM base AS builder
+COPY --from=install /app/node_modules ./node_modules
+COPY . .
+# Generate protobufs
+RUN bun run generate
 
-# Move build files
-COPY --from=build-runner /tmp/app/build /app/build
+# Final production stage
+FROM base AS release
+# Install libc6-compat for sharp/native modules and other runtime dependencies
+RUN apk add --no-cache libc6-compat
 
-# Start bot
-CMD [ "npm", "run", "start" ]
+COPY --from=install /app/node_modules ./node_modules
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/proto ./proto
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+
+# Create data directory and set permissions
+RUN mkdir -p /app/data && chown -R bun:bun /app/data
+
+# Optional: User bun for security
+USER bun
+
+# Set environment variables
+ENV NODE_ENV=production
+
+# Start the bot directly with Bun
+ENTRYPOINT ["bun", "run", "src/main.ts"]

@@ -1,7 +1,21 @@
-version: "3"
+version: "3.8"
 services:
-  app:
+  bot:
     build: .
-    command: node build/main.js
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
+      - NODE_ENV=production
       - BOT_TOKEN=${BOT_TOKEN}
+    volumes:
+      # Persistent storage for credentials and state files
+      - bot-data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10mb"
+        max-file: "3"
+
+volumes:
+  bot-data:

@@ -64,7 +64,8 @@ bot.once("clientReady", async () => {
   }
 
   // Load credentials and initialize handlers
-  const credentialsPath = path.join(process.cwd(), 'credentials.json');
+  const dataDir = path.join(process.cwd(), 'data');
+  const credentialsPath = path.join(dataDir, 'credentials.json');
   const credentialManager = new JsonPersistenceManager(credentialsPath);
   const savedCreds = credentialManager.loadState();
 
@@ -89,7 +90,7 @@ bot.once("clientReady", async () => {
   }
 
   if (envAndroidId && envSecurityToken && envPlayerId) {
-    const persistenceManager = new JsonPersistenceManager(path.join(process.cwd(), 'fcm-state.json'));
+    const persistenceManager = new JsonPersistenceManager(path.join(dataDir, 'fcm-state.json'));
     appState.fcmHandler = createFcmHandler({
       androidId: envAndroidId,
       securityToken: envSecurityToken,
