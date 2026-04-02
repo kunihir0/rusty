@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, ComponentType, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, TextInputBuilder, TextInputStyle, type Interaction, ThreadChannel, type MessageActionRowComponent, type APIButtonComponentWithCustomId, MessageFlags } from "discord.js";
 import path from "path";
 import { appState } from "../../state/AppState";
+import { dataDir } from "../../bot.js";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
 import { RustPlus } from "../../rustplus/ws";
 import { RECYCLING_RESOURCES, RESOURCE_NAMES } from "../../rustplus/utils/Recycling";
@@ -106,7 +107,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                 return true;
             }
 
-            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+            const fcmStatePath = path.join(dataDir, 'fcm-state.json');
             const persistence = new JsonPersistenceManager(fcmStatePath);
             const state = appState.fcmHandler.state;
 
@@ -204,7 +205,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                     switchState.active = newState;
                     
                     if (appState.fcmHandler) {
-                        const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                        const fcmStatePath = path.join(dataDir, 'fcm-state.json');
                         const persistence = new JsonPersistenceManager(fcmStatePath);
                         persistence.saveState(appState.fcmHandler.state);
                     }
@@ -254,7 +255,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                      await interaction.editReply("FCM Handler inactive.");
                      return true;
                 }
-                const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                const fcmStatePath = path.join(dataDir, 'fcm-state.json');
                 const persistence = new JsonPersistenceManager(fcmStatePath);
                 const state = appState.fcmHandler.state;
                 
@@ -289,7 +290,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
             await interaction.deferUpdate();
             
             if (!appState.fcmHandler) return true;
-            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+            const fcmStatePath = path.join(dataDir, 'fcm-state.json');
             const persistence = new JsonPersistenceManager(fcmStatePath);
             const state = appState.fcmHandler.state;
             
@@ -327,7 +328,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
         } else if (action === 'dm') {
             await interaction.deferUpdate();
             
-            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+            const fcmStatePath = path.join(dataDir, 'fcm-state.json');
             const persistence = new JsonPersistenceManager(fcmStatePath);
             const state = persistence.loadState();
             
@@ -405,7 +406,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                      await interaction.editReply("FCM Handler inactive.");
                      return true;
                 }
-                const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                const fcmStatePath = path.join(dataDir, 'fcm-state.json');
                 const persistence = new JsonPersistenceManager(fcmStatePath);
                 const state = appState.fcmHandler.state;
                 
@@ -440,7 +441,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
             await interaction.deferUpdate();
             
             if (!appState.fcmHandler) return true;
-            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+            const fcmStatePath = path.join(dataDir, 'fcm-state.json');
             const persistence = new JsonPersistenceManager(fcmStatePath);
             const state = appState.fcmHandler.state;
             
@@ -546,7 +547,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
                      await interaction.editReply("FCM Handler inactive.");
                      return true;
                 }
-                const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                const fcmStatePath = path.join(dataDir, 'fcm-state.json');
                 const persistence = new JsonPersistenceManager(fcmStatePath);
                 const state = appState.fcmHandler.state;
                 
@@ -585,7 +586,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
             await interaction.editReply("FCM Handler inactive.");
             return true;
         }
-        const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+        const fcmStatePath = path.join(dataDir, 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
         const state = appState.fcmHandler.state;
         
@@ -635,7 +636,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
              await interaction.editReply("FCM Handler inactive.");
              return true;
         }
-        const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+        const fcmStatePath = path.join(dataDir, 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
         const state = appState.fcmHandler.state;
 
@@ -691,7 +692,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
              await interaction.editReply("FCM Handler inactive.");
              return true;
         }
-        const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+        const fcmStatePath = path.join(dataDir, 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
         const state = appState.fcmHandler.state;
 
@@ -754,7 +755,7 @@ export async function handleInteraction(interaction: Interaction): Promise<boole
              await interaction.followUp({ content: "FCM Handler inactive.", flags: MessageFlags.Ephemeral });
              return true;
         }
-        const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+        const fcmStatePath = path.join(dataDir, 'fcm-state.json');
         const persistence = new JsonPersistenceManager(fcmStatePath);
         const state = appState.fcmHandler.state;
 

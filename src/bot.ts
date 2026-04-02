@@ -64,7 +64,7 @@ bot.once("clientReady", async () => {
   }
 
   // Load credentials and initialize handlers
-  const dataDir = path.join(process.cwd(), 'data');
+export const dataDir = process.env.DATA_DIR ?? path.join(process.cwd(), 'data');
   const credentialsPath = path.join(dataDir, 'credentials.json');
   const credentialManager = new JsonPersistenceManager(credentialsPath);
   const savedCreds = credentialManager.loadState();

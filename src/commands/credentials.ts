@@ -1,5 +1,6 @@
 import { ApplicationCommandOptionType, type CommandInteraction, MessageFlags } from "discord.js";
 import { Discord, Slash, SlashGroup, SlashOption } from "discordx";
+import { dataDir } from "../bot.js";
 import { JsonPersistenceManager } from "../rustplus/PersistenceManager";
 import { appState } from "../state/AppState";
 import path from "path";
@@ -56,7 +57,7 @@ export class Credentials {
     const expireDate = parseInt(expireDateStr, 10);
 
     // Save credentials
-    const credentialsPath = path.join(process.cwd(), 'credentials.json');
+    const credentialsPath = path.join(dataDir, 'credentials.json');
     const persistence = new JsonPersistenceManager(credentialsPath);
     
     persistence.saveState({
@@ -93,8 +94,8 @@ export class Credentials {
         }
 
         // 2. Clear Persistence
-        const credentialsPath = path.join(process.cwd(), 'fcm-state.json');
-        const persistence = new JsonPersistenceManager(credentialsPath);
+        const fcmStatePath = path.join(dataDir, 'fcm-state.json');
+        const persistence = new JsonPersistenceManager(fcmStatePath);
         
         let state;
         if (appState.fcmHandler) {

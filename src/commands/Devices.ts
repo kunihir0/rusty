@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, CommandInteraction, EmbedBuilder, Colors, MessageFlags } from "discord.js";
 import { Discord, Slash, SlashChoice, SlashGroup, SlashOption } from "discordx";
 import { appState } from "../state/AppState";
+import { dataDir } from "../bot.js";
 import { JsonPersistenceManager } from "../rustplus/PersistenceManager";
 import path from "path";
 
@@ -10,7 +11,7 @@ import path from "path";
 export class DeviceCommands {
     
     private getPersistence(): JsonPersistenceManager {
-        return new JsonPersistenceManager(path.join(process.cwd(), 'fcm-state.json'));
+        return new JsonPersistenceManager(path.join(dataDir, 'fcm-state.json'));
     }
 
     @Slash({ name: "list", description: "List all paired devices" })

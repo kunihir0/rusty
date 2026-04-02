@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ThreadChannel } from "discord.js";
 import path from "path";
 import { appState } from "../../state/AppState";
+import { dataDir } from "../../bot.js";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
 import { connectToRustServer, getCurrentServerId } from "./RustPlusManager";
 import { configManager } from "../../config/BotConfig";
@@ -75,7 +76,7 @@ export async function handleFcmEvent(type: string, data: any) {
             if (appState.fcmHandler) {
                 appState.fcmHandler.state.serverList[data.serverId].discordThreadId = thread.id;
                 
-                const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                const fcmStatePath = path.join(dataDir, 'fcm-state.json');
                 const persistence = new JsonPersistenceManager(fcmStatePath);
                 persistence.saveState(appState.fcmHandler.state);
             }
@@ -128,7 +129,7 @@ export async function handleFcmEvent(type: string, data: any) {
                         // Save Message ID for updates
                         if (appState.fcmHandler) {
                             appState.fcmHandler.state.serverList[data.serverId].battlemetricsMessageId = bmMessage.id;
-                            const fcmStatePath = path.join(process.cwd(), 'fcm-state.json');
+                            const fcmStatePath = path.join(dataDir, 'fcm-state.json');
                             const persistence = new JsonPersistenceManager(fcmStatePath);
                             persistence.saveState(appState.fcmHandler.state);
                         }
