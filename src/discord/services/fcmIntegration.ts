@@ -292,7 +292,7 @@ export async function handleFcmEvent(type: string, data: any) {
                 content = "@everyone";
             }
 
-            await thread.send({ content: content || undefined, embeds: [embed] });
+            await thread.send(content ? { content, embeds: [embed] } : { embeds: [embed] });
         }
 
         // Send DMs to opted-in users

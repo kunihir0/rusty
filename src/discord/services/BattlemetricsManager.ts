@@ -1,6 +1,6 @@
 import { createBattlemetricsClient, BattlemetricsClient } from "../../rustplus/services/battlemetrics";
 import { appState } from "../../state/AppState";
-import { EmbedBuilder, Colors, TextChannel, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from "discord.js";
+import { EmbedBuilder, Colors, TextChannel, ThreadChannel, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from "discord.js";
 import { TeamDetectorService } from "./TeamDetectorService";
 import { JsonPersistenceManager } from "../../rustplus/PersistenceManager";
 import { SteamService } from "../../rustplus/services/SteamService";
@@ -109,7 +109,7 @@ export async function addToWatchList(inputSteamId: string): Promise<{ success: b
         // Basic cleanup if user pasted url
         if (steamId.includes('/profiles/')) {
             const match = steamId.match(/profiles\/(\d+)/);
-            if (match) steamId = match[1];
+            if (match && match[1]) steamId = match[1];
         }
         
         const steamName = await steamService.getProfileName(steamId);

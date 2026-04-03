@@ -167,7 +167,7 @@ export class ConfigurationService {
 
         if (interaction.isRoleSelectMenu()) {
             if (interaction.customId === 'config-role-select') {
-                const roleId = interaction.values[0];
+                const roleId = interaction.values[0] || null;
                 configManager.updateConfig({ configAdminRoleId: roleId });
                 if (interaction.channel instanceof TextChannel) {
                     await interaction.deferUpdate();

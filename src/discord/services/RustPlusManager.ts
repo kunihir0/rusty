@@ -12,7 +12,7 @@ import { afkStatistics } from "../../rustplus/AfkStatisticsManager";
 
 let rustPlus: RustPlus | null = null;
 let currentServerId: string | null = null;
-let pollingInterval: NodeJS.Timer | null = null;
+let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
 export function getRustPlus() {
     return rustPlus;

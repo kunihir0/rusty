@@ -27,7 +27,8 @@ const DEFAULT_CONFIG: BotConfig = {
     configAdminRoleId: null
 };
 
-const CONFIG_PATH = path.join(process.cwd(), 'bot-config.json');
+const dataDir = process.env.DATA_DIR ?? path.join(process.cwd(), 'data');
+const CONFIG_PATH = path.join(dataDir, 'bot-config.json');
 
 export class ConfigManager {
     private config: BotConfig;
@@ -50,6 +51,7 @@ export class ConfigManager {
 
     public save(): void {
         try {
+            fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
             fs.writeFileSync(CONFIG_PATH, JSON.stringify(this.config, null, 2));
         } catch (e) {
             console.error("Failed to save bot config:", e);

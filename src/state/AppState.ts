@@ -9,16 +9,16 @@ import { ConfigurationService } from "../discord/services/ConfigurationService";
 
 // Shared mutable state
 export const appState: {
-    rustPlus?: RustPlus;
-    fcmHandler?: ReturnType<typeof createFcmHandler>;
+    rustPlus?: RustPlus | undefined;
+    fcmHandler?: ReturnType<typeof createFcmHandler> | undefined;
     pairingChannels: Map<string, TextChannel>;
-    configService?: ConfigurationService;
-    
+    configService?: ConfigurationService | undefined;
+
     // Active Server Services
-    mapGenerator?: MapGenerator;
-    teamTracker?: TeamTracker;
-    vendingMachineService?: VendingMachineService;
-    mapSize?: number;
+    mapSize?: number | undefined;
+    mapGenerator?: MapGenerator | undefined;
+    teamTracker?: TeamTracker | undefined;
+    vendingMachineService?: VendingMachineService | undefined;
 } = {
     pairingChannels: new Map<string, TextChannel>()
 };
